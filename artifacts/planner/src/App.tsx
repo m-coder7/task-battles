@@ -3,19 +3,20 @@ import {
   format, addMonths, subMonths, startOfWeek, endOfWeek,
   addWeeks, subWeeks,
 } from "date-fns";
-import { Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon, Target } from "lucide-react";
+import { Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon, Target, Swords } from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
 import DayView from "@/components/DayView";
 import WeekView from "@/components/WeekView";
 import GoalsPanel from "@/components/GoalsPanel";
+import RivalryPanel from "@/components/RivalryPanel";
 import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent } from "@/hooks/useEvents";
 import { useGoals } from "@/hooks/useGoals";
 import { useNotifications } from "@/hooks/useNotifications";
 
 type View = "month" | "week" | "day";
-type Section = "calendar" | "goals";
+type Section = "calendar" | "goals" | "rivalry";
 
 function useTheme() {
   const [dark, setDark] = useState(() =>
@@ -103,6 +104,12 @@ export default function App() {
     (g) => !g.completed && new Date(g.date) < new Date(new Date().toDateString())
   );
 
+  const navItems: { id: Section; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: "calendar", label: "Calendar", icon: <Calendar size={15} /> },
+    { id: "goals",    label: "Goals",    icon: <Target size={15} />, badge: overdueGoals.length || undefined },
+    { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
+  ];
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <aside className="w-56 shrink-0 flex flex-col border-r border-border bg-[hsl(var(--sidebar))]">
@@ -113,33 +120,25 @@ export default function App() {
           </div>
 
           <div className="flex flex-col gap-1 mb-4">
-            <button
-              onClick={() => setSection("calendar")}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                ${section === "calendar"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))]"
-                }`}
-            >
-              <Calendar size={15} />
-              Calendar
-            </button>
-            <button
-              onClick={() => setSection("goals")}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative
-                ${section === "goals"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))]"
-                }`}
-            >
-              <Target size={15} />
-              Goals
-              {overdueGoals.length > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 flex items-center justify-center">
-                  {overdueGoals.length}
-                </span>
-              )}
-            </button>
+            {navItems.map(({ id, label, icon, badge }) => (
+              <button
+                key={id}
+                onClick={() => setSection(id)}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                  ${section === id
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))]"
+                  }`}
+              >
+                {icon}
+                {label}
+                {badge ? (
+                  <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {badge}
+                  </span>
+                ) : null}
+              </button>
+            ))}
           </div>
 
           {section === "calendar" && (
@@ -267,6 +266,7 @@ export default function App() {
         )}
 
         {section === "goals" && <GoalsPanel />}
+        {section === "rivalry" && <RivalryPanel />}
       </main>
 
       <EventDialog
