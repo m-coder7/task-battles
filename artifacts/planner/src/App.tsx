@@ -3,15 +3,19 @@ import {
   format, addMonths, subMonths, startOfWeek, endOfWeek,
   addWeeks, subWeeks,
 } from "date-fns";
-import { Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon } from "lucide-react";
+import { Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon, Target } from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
 import DayView from "@/components/DayView";
 import WeekView from "@/components/WeekView";
+import GoalsPanel from "@/components/GoalsPanel";
 import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent } from "@/hooks/useEvents";
+import { useGoals } from "@/hooks/useGoals";
+import { useNotifications } from "@/hooks/useNotifications";
 
 type View = "month" | "week" | "day";
+type Section = "calendar" | "goals";
 
 function useTheme() {
   const [dark, setDark] = useState(() =>
@@ -29,6 +33,7 @@ function useTheme() {
 }
 
 export default function App() {
+  const [section, setSection] = useState<Section>("calendar");
   const [view, setView] = useState<View>("month");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -37,7 +42,10 @@ export default function App() {
   const [dialogInitialTime, setDialogInitialTime] = useState<string | undefined>();
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
+  const { goals, markNotified } = useGoals();
   const { dark, toggle } = useTheme();
+
+  useNotifications(goals, markNotified);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
@@ -91,37 +99,75 @@ export default function App() {
     return format(selectedDate, "EEEE, MMMM d, yyyy");
   };
 
+  const overdueGoals = goals.filter(
+    (g) => !g.completed && new Date(g.date) < new Date(new Date().toDateString())
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <aside className="w-56 shrink-0 flex flex-col border-r border-border bg-[hsl(var(--sidebar))]">
         <div className="px-4 pt-5 pb-3">
-          <div className="flex items-center gap-2 mb-5">
+          <div className="flex items-center gap-2 mb-4">
             <CalendarDays size={20} className="text-primary" />
             <span className="text-base font-semibold text-foreground">Day Planner</span>
           </div>
 
-          <button
-            onClick={() => openNew()}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
-          >
-            <Plus size={16} />
-            New Event
-          </button>
+          <div className="flex flex-col gap-1 mb-4">
+            <button
+              onClick={() => setSection("calendar")}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                ${section === "calendar"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))]"
+                }`}
+            >
+              <Calendar size={15} />
+              Calendar
+            </button>
+            <button
+              onClick={() => setSection("goals")}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative
+                ${section === "goals"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))]"
+                }`}
+            >
+              <Target size={15} />
+              Goals
+              {overdueGoals.length > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 flex items-center justify-center">
+                  {overdueGoals.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {section === "calendar" && (
+            <button
+              onClick={() => openNew()}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
+            >
+              <Plus size={16} />
+              New Event
+            </button>
+          )}
         </div>
 
-        <div className="px-3 pb-3">
-          <MiniCalendar
-            currentMonth={currentMonth}
-            selectedDate={selectedDate}
-            events={events}
-            onSelectDate={(d) => {
-              setSelectedDate(d);
-              setCurrentMonth(d);
-              if (view === "month") setView("day");
-            }}
-            onMonthChange={setCurrentMonth}
-          />
-        </div>
+        {section === "calendar" && (
+          <div className="px-3 pb-3">
+            <MiniCalendar
+              currentMonth={currentMonth}
+              selectedDate={selectedDate}
+              events={events}
+              onSelectDate={(d) => {
+                setSelectedDate(d);
+                setCurrentMonth(d);
+                if (view === "month") setView("day");
+              }}
+              onMonthChange={setCurrentMonth}
+            />
+          </div>
+        )}
 
         <div className="mt-auto px-3 pb-4 space-y-1">
           <button
@@ -135,86 +181,92 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
-          <button
-            onClick={goToday}
-            className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
-          >
-            Today
-          </button>
-
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <button
-              onClick={() => navigate(1)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          </div>
-
-          <h1 className="text-base font-semibold text-foreground min-w-48">
-            {headerLabel()}
-          </h1>
-
-          <div className="ml-auto flex items-center gap-1 p-1 bg-muted rounded-lg">
-            {(["month", "week", "day"] as View[]).map((v) => (
+        {section === "calendar" && (
+          <>
+            <header className="flex items-center gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
               <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors capitalize
-                  ${view === v
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                  }`}
+                onClick={goToday}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
               >
-                {v === "month" && <LayoutGrid size={14} />}
-                {v === "week" && <Calendar size={14} />}
-                {v === "day" && <Sun size={14} />}
-                {v}
+                Today
               </button>
-            ))}
-          </div>
-        </header>
 
-        <div className="flex-1 overflow-hidden bg-card">
-          {view === "month" && (
-            <MonthView
-              currentMonth={currentMonth}
-              selectedDate={selectedDate}
-              events={events}
-              onSelectDate={(d) => { setSelectedDate(d); setView("day"); }}
-              onNewEvent={(date) => openNew(date)}
-              onEditEvent={openEdit}
-            />
-          )}
-          {view === "week" && (
-            <WeekView
-              selectedDate={selectedDate}
-              events={events}
-              onSelectDate={(d) => { setSelectedDate(d); setView("day"); }}
-              onNewEvent={(date, time) => openNew(date, time)}
-              onEditEvent={openEdit}
-            />
-          )}
-          {view === "day" && (
-            <DayView
-              selectedDate={selectedDate}
-              events={events}
-              onNewEvent={(date, time) => openNew(date, time)}
-              onEditEvent={openEdit}
-            />
-          )}
-        </div>
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => navigate(-1)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => navigate(1)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+
+              <h1 className="text-base font-semibold text-foreground min-w-48">
+                {headerLabel()}
+              </h1>
+
+              <div className="ml-auto flex items-center gap-1 p-1 bg-muted rounded-lg">
+                {(["month", "week", "day"] as View[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors capitalize
+                      ${view === v
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    {v === "month" && <LayoutGrid size={14} />}
+                    {v === "week" && <Calendar size={14} />}
+                    {v === "day" && <Sun size={14} />}
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-hidden bg-card">
+              {view === "month" && (
+                <MonthView
+                  currentMonth={currentMonth}
+                  selectedDate={selectedDate}
+                  events={events}
+                  onSelectDate={(d) => { setSelectedDate(d); setView("day"); }}
+                  onNewEvent={(date) => openNew(date)}
+                  onEditEvent={openEdit}
+                />
+              )}
+              {view === "week" && (
+                <WeekView
+                  selectedDate={selectedDate}
+                  events={events}
+                  onSelectDate={(d) => { setSelectedDate(d); setView("day"); }}
+                  onNewEvent={(date, time) => openNew(date, time)}
+                  onEditEvent={openEdit}
+                />
+              )}
+              {view === "day" && (
+                <DayView
+                  selectedDate={selectedDate}
+                  events={events}
+                  onNewEvent={(date, time) => openNew(date, time)}
+                  onEditEvent={openEdit}
+                />
+              )}
+            </div>
+          </>
+        )}
+
+        {section === "goals" && <GoalsPanel />}
       </main>
 
       <EventDialog
