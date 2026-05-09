@@ -1,21 +1,27 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   format, addMonths, subMonths, startOfWeek, endOfWeek,
-  addWeeks, subWeeks,
+  addWeeks, subWeeks, addDays, parseISO, isToday,
 } from "date-fns";
-import { Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon, Target, Swords } from "lucide-react";
+import {
+  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon,
+  Target, Swords, List, Search, Clock, ChevronRight,
+} from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
 import DayView from "@/components/DayView";
 import WeekView from "@/components/WeekView";
+import AgendaView from "@/components/AgendaView";
+import TodayPanel from "@/components/TodayPanel";
 import GoalsPanel from "@/components/GoalsPanel";
 import RivalryPanel from "@/components/RivalryPanel";
+import SearchModal from "@/components/SearchModal";
 import EventDialog from "@/components/EventDialog";
-import { useEvents, CalendarEvent } from "@/hooks/useEvents";
-import { useGoals } from "@/hooks/useGoals";
+import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
+import { useGoals, isActiveToday, isCompletedToday } from "@/hooks/useGoals";
 import { useNotifications } from "@/hooks/useNotifications";
 
-type View = "month" | "week" | "day";
+type View = "today" | "month" | "week" | "day" | "agenda";
 type Section = "calendar" | "goals" | "rivalry";
 
 function useTheme() {
@@ -35,18 +41,49 @@ function useTheme() {
 
 export default function App() {
   const [section, setSection] = useState<Section>("calendar");
-  const [view, setView] = useState<View>("month");
+  const [view, setView] = useState<View>("today");
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogInitialDate, setDialogInitialDate] = useState<string | undefined>();
   const [dialogInitialTime, setDialogInitialTime] = useState<string | undefined>();
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
-  const { goals, markNotified } = useGoals();
+  const { goals, markNotified, toggleComplete } = useGoals();
   const { dark, toggle } = useTheme();
 
   useNotifications(goals, markNotified);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      // Cmd/Ctrl+K → search
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "n" && section === "calendar") {
+        openNew(format(selectedDate, "yyyy-MM-dd"));
+      }
+      if (e.key === "t") {
+        goToday();
+        setView("today");
+      }
+      if (e.key === "1") setView("today");
+      if (e.key === "2") setView("month");
+      if (e.key === "3") setView("week");
+      if (e.key === "4") setView("day");
+      if (e.key === "5") setView("agenda");
+      if (e.key === "/") { e.preventDefault(); setSearchOpen(true); }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [section, selectedDate]);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
@@ -78,9 +115,9 @@ export default function App() {
       const next = dir === 1 ? addWeeks(selectedDate, 1) : subWeeks(selectedDate, 1);
       setSelectedDate(next);
     } else {
-      const next = new Date(selectedDate);
-      next.setDate(next.getDate() + dir);
+      const next = addDays(selectedDate, dir);
       setSelectedDate(next);
+      setCurrentMonth(next);
     }
   }, [view, currentMonth, selectedDate]);
 
@@ -91,7 +128,9 @@ export default function App() {
   };
 
   const headerLabel = () => {
+    if (view === "today") return "Today";
     if (view === "month") return format(currentMonth, "MMMM yyyy");
+    if (view === "agenda") return "Upcoming";
     if (view === "week") {
       const ws = startOfWeek(selectedDate, { weekStartsOn: 0 });
       const we = endOfWeek(selectedDate, { weekStartsOn: 0 });
@@ -101,8 +140,30 @@ export default function App() {
   };
 
   const overdueGoals = goals.filter(
-    (g) => !g.completed && new Date(g.date) < new Date(new Date().toDateString())
+    (g) => !g.completed && (g.repeat ?? "none") === "none" &&
+      new Date(g.date) < new Date(new Date().toDateString())
   );
+
+  // Upcoming events for sidebar widget (next 5 events from today)
+  const upcomingEvents = useMemo(() => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return events
+      .filter((e) => {
+        if (e.date > today) return true;
+        if (e.date === today && !e.allDay) {
+          const [h, m] = e.startTime.split(":").map(Number);
+          return (h * 60 + m) >= nowMin;
+        }
+        return false;
+      })
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.startTime.localeCompare(b.startTime);
+      })
+      .slice(0, 4);
+  }, [events]);
 
   const navItems: { id: Section; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "calendar", label: "Calendar", icon: <Calendar size={15} /> },
@@ -110,16 +171,34 @@ export default function App() {
     { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
   ];
 
+  const calendarViews: { id: View; icon: React.ReactNode; label: string; shortcut: string }[] = [
+    { id: "today",  icon: <Sun size={13} />,         label: "Today",  shortcut: "1" },
+    { id: "month",  icon: <LayoutGrid size={13} />,  label: "Month",  shortcut: "2" },
+    { id: "week",   icon: <Calendar size={13} />,    label: "Week",   shortcut: "3" },
+    { id: "day",    icon: <CalendarDays size={13} />, label: "Day",   shortcut: "4" },
+    { id: "agenda", icon: <List size={13} />,         label: "Agenda", shortcut: "5" },
+  ];
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      {/* Sidebar */}
       <aside className="w-56 shrink-0 flex flex-col border-r border-border bg-[hsl(var(--sidebar))]">
-        <div className="px-4 pt-5 pb-3">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarDays size={20} className="text-primary" />
-            <span className="text-base font-semibold text-foreground">Day Planner</span>
+        <div className="px-4 pt-5 pb-2">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={19} className="text-primary" />
+              <span className="text-base font-semibold text-foreground">Day Planner</span>
+            </div>
+            <button
+              onClick={() => setSearchOpen(true)}
+              title="Search (/ or Ctrl+K)"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))] transition-colors"
+            >
+              <Search size={14} />
+            </button>
           </div>
 
-          <div className="flex flex-col gap-1 mb-4">
+          <div className="flex flex-col gap-0.5 mb-3">
             {navItems.map(({ id, label, icon, badge }) => (
               <button
                 key={id}
@@ -146,14 +225,15 @@ export default function App() {
               onClick={() => openNew()}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
             >
-              <Plus size={16} />
+              <Plus size={15} />
               New Event
+              <kbd className="ml-auto text-[9px] font-mono opacity-60 border border-primary-foreground/30 rounded px-1">N</kbd>
             </button>
           )}
         </div>
 
         {section === "calendar" && (
-          <div className="px-3 pb-3">
+          <div className="px-3 pb-2">
             <MiniCalendar
               currentMonth={currentMonth}
               selectedDate={selectedDate}
@@ -161,10 +241,45 @@ export default function App() {
               onSelectDate={(d) => {
                 setSelectedDate(d);
                 setCurrentMonth(d);
-                if (view === "month") setView("day");
+                setView("day");
               }}
               onMonthChange={setCurrentMonth}
             />
+          </div>
+        )}
+
+        {/* Upcoming widget */}
+        {section === "calendar" && upcomingEvents.length > 0 && (
+          <div className="px-4 pt-1 pb-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Upcoming</span>
+              <button
+                onClick={() => setView("agenda")}
+                className="text-[10px] text-primary hover:underline font-medium flex items-center gap-0.5"
+              >
+                All <ChevronRight size={10} />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {upcomingEvents.map((e) => {
+                const colors = COLOR_MAP[e.color];
+                const isEToday = isToday(parseISO(e.date));
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => { openEdit(e); }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[hsl(var(--sidebar-accent))] transition-colors text-left"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${colors.dot}`} />
+                    <span className="text-xs text-foreground truncate flex-1">{e.title}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0 flex items-center gap-0.5">
+                      <Clock size={9} />
+                      {isEToday ? e.startTime : format(parseISO(e.date), "MMM d")}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -179,61 +294,84 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Main area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {section === "calendar" && (
           <>
             <header className="flex items-center gap-3 px-5 py-3 border-b border-border bg-card shrink-0">
-              <button
-                onClick={goToday}
-                className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
-              >
-                Today
-              </button>
-
-              <div className="flex items-center gap-0.5">
+              {view !== "today" && view !== "agenda" && (
                 <button
-                  onClick={() => navigate(-1)}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  onClick={goToday}
+                  className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+                  Today
                 </button>
-                <button
-                  onClick={() => navigate(1)}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              </div>
+              )}
 
-              <h1 className="text-base font-semibold text-foreground min-w-48">
+              {(view === "month" || view === "week" || view === "day") && (
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => navigate(-1)}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => navigate(1)}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              )}
+
+              <h1 className="text-base font-semibold text-foreground">
                 {headerLabel()}
               </h1>
 
-              <div className="ml-auto flex items-center gap-1 p-1 bg-muted rounded-lg">
-                {(["month", "week", "day"] as View[]).map((v) => (
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted text-sm transition-colors"
+              >
+                <Search size={13} />
+                <span className="text-xs">Search</span>
+                <kbd className="text-[9px] font-mono border border-border rounded px-1 py-0.5">⌘K</kbd>
+              </button>
+
+              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+                {calendarViews.map(({ id, icon, label, shortcut }) => (
                   <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors capitalize
-                      ${view === v
+                    key={id}
+                    onClick={() => { setView(id); if (id !== "today" && id !== "agenda") goToday(); }}
+                    title={`${label} (${shortcut})`}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors
+                      ${view === id
                         ? "bg-card text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
                       }`}
                   >
-                    {v === "month" && <LayoutGrid size={14} />}
-                    {v === "week" && <Calendar size={14} />}
-                    {v === "day" && <Sun size={14} />}
-                    {v}
+                    {icon}
+                    {label}
                   </button>
                 ))}
               </div>
             </header>
 
-            <div className="flex-1 overflow-hidden bg-card">
+            <div className="flex-1 overflow-hidden bg-background">
+              {view === "today" && (
+                <TodayPanel
+                  events={events}
+                  goals={goals}
+                  onNewEvent={(date, time) => openNew(date, time)}
+                  onEditEvent={openEdit}
+                  onToggleGoal={toggleComplete}
+                  onGoToDay={() => { setView("day"); goToday(); }}
+                />
+              )}
               {view === "month" && (
                 <MonthView
                   currentMonth={currentMonth}
@@ -261,6 +399,15 @@ export default function App() {
                   onEditEvent={openEdit}
                 />
               )}
+              {view === "agenda" && (
+                <AgendaView
+                  events={events}
+                  goals={goals}
+                  onNewEvent={(date, time) => openNew(date, time)}
+                  onEditEvent={openEdit}
+                  onToggleGoal={toggleComplete}
+                />
+              )}
             </div>
           </>
         )}
@@ -277,6 +424,20 @@ export default function App() {
         initialDate={dialogInitialDate}
         initialStartTime={dialogInitialTime}
         editEvent={editingEvent}
+      />
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        events={events}
+        goals={goals}
+        onSelectEvent={openEdit}
+        onGoToDate={(date, v) => {
+          setSelectedDate(date);
+          setCurrentMonth(date);
+          setView(v);
+          setSection("calendar");
+        }}
       />
     </div>
   );
