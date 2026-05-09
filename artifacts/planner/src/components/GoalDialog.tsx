@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, RefreshCw } from "lucide-react";
-import { Goal, GoalCategory, GoalRepeat, CATEGORY_META, REPEAT_META } from "@/hooks/useGoals";
+import { Goal, GoalCategory, GoalRepeat, CATEGORY_META, REPEAT_META, DAY_LABELS } from "@/hooks/useGoals";
 import { format } from "date-fns";
 
 interface GoalDialogProps {
@@ -13,7 +13,7 @@ interface GoalDialogProps {
 }
 
 const CATEGORIES: GoalCategory[] = ["must-do", "should-do", "nice-to-have"];
-const REPEATS: GoalRepeat[] = ["none", "daily", "weekdays", "weekly"];
+const REPEATS: GoalRepeat[] = ["none", "daily", "weekdays", "weekly", "custom"];
 
 const DEFAULT_MESSAGES: Record<GoalCategory, string> = {
   "must-do":      "This was a must-do goal and it's not done yet. Time to focus!",
@@ -27,6 +27,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
   const [date, setDate] = useState(initialDate ?? format(new Date(), "yyyy-MM-dd"));
   const [time, setTime] = useState("");
   const [repeat, setRepeat] = useState<GoalRepeat>("none");
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationMessage, setNotificationMessage] = useState(DEFAULT_MESSAGES["must-do"]);
   const [messageEdited, setMessageEdited] = useState(false);
@@ -38,6 +39,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       setDate(editGoal.date);
       setTime(editGoal.time ?? "");
       setRepeat(editGoal.repeat ?? "none");
+      setRepeatDays(editGoal.repeatDays ?? []);
       setNotificationsEnabled(editGoal.notificationsEnabled);
       setNotificationMessage(editGoal.notificationMessage);
       setMessageEdited(true);
@@ -47,6 +49,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       setDate(initialDate ?? format(new Date(), "yyyy-MM-dd"));
       setTime("");
       setRepeat("none");
+      setRepeatDays([]);
       setNotificationsEnabled(true);
       setNotificationMessage(DEFAULT_MESSAGES["must-do"]);
       setMessageEdited(false);
@@ -58,17 +61,25 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
     if (!messageEdited) setNotificationMessage(DEFAULT_MESSAGES[c]);
   }
 
+  function toggleRepeatDay(dow: number) {
+    setRepeatDays((prev) =>
+      prev.includes(dow) ? prev.filter((d) => d !== dow) : [...prev, dow].sort()
+    );
+  }
+
   if (!open) return null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    if (repeat === "custom" && repeatDays.length === 0) return;
     onSave({
       title: title.trim(),
       category,
       date,
       time: time || undefined,
       repeat,
+      repeatDays: repeat === "custom" ? repeatDays : undefined,
       notificationsEnabled,
       notificationMessage,
     });
@@ -76,6 +87,14 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
   }
 
   const isRepeating = repeat !== "none";
+
+  const repeatDescription = () => {
+    if (repeat === "daily") return "every day";
+    if (repeat === "weekdays") return "Mon–Fri";
+    if (repeat === "weekly") return `every ${format(new Date(date + "T00:00:00"), "EEEE")}`;
+    if (repeat === "custom" && repeatDays.length > 0) return repeatDays.map((d) => DAY_LABELS[d]).join(", ");
+    return "";
+  };
 
   return (
     <div
@@ -93,7 +112,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[82vh] overflow-y-auto">
           <input
             autoFocus
             type="text"
@@ -125,10 +144,10 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
             <label className="block text-xs font-medium text-muted-foreground mb-2">
               <span className="flex items-center gap-1.5"><RefreshCw size={11} /> Repeat</span>
             </label>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               {REPEATS.map((r) => (
                 <button key={r} type="button" onClick={() => setRepeat(r)}
-                  className={`py-1.5 px-1 rounded-lg text-xs font-medium border transition-all
+                  className={`py-1.5 px-1 rounded-lg text-[11px] font-medium border transition-all leading-tight
                     ${repeat === r
                       ? "bg-primary/10 text-primary border-primary/30"
                       : "border-border text-muted-foreground hover:bg-muted"}`}
@@ -137,6 +156,30 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
                 </button>
               ))}
             </div>
+
+            {repeat === "custom" && (
+              <div className="mt-2.5">
+                <label className="block text-xs text-muted-foreground mb-1.5">Pick which days</label>
+                <div className="flex gap-1">
+                  {DAY_LABELS.map((label, dow) => (
+                    <button
+                      key={dow}
+                      type="button"
+                      onClick={() => toggleRepeatDay(dow)}
+                      className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold border transition-all
+                        ${repeatDays.includes(dow)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border text-muted-foreground hover:bg-muted"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {repeatDays.length === 0 && (
+                  <p className="text-[11px] text-destructive mt-1">Select at least one day</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -164,9 +207,9 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
             </div>
           </div>
 
-          {isRepeating && (
+          {isRepeating && repeatDescription() && (
             <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs text-primary/80">
-              This goal will appear every {repeat === "weekly" ? "week on the same day" : repeat === "weekdays" ? "weekday (Mon–Fri)" : "day"} starting {format(new Date(date + "T00:00:00"), "MMM d")}. Your progress resets each day.
+              Repeats <strong>{repeatDescription()}</strong> starting {format(new Date(date + "T00:00:00"), "MMM d")}. Progress resets each day.
             </div>
           )}
 
@@ -210,8 +253,11 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
               className="px-4 py-2 text-sm font-medium text-secondary-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={!title.trim()}
-              className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors">
+            <button
+              type="submit"
+              disabled={!title.trim() || (repeat === "custom" && repeatDays.length === 0)}
+              className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
               {editGoal ? "Save" : "Add Goal"}
             </button>
           </div>

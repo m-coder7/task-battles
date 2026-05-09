@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { format, parseISO, isBefore, startOfDay, getDay } from "date-fns";
 
 export type GoalCategory = "must-do" | "should-do" | "nice-to-have";
-export type GoalRepeat = "none" | "daily" | "weekdays" | "weekly";
+export type GoalRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
 
 export interface Goal {
   id: string;
@@ -13,6 +13,7 @@ export interface Goal {
   completed: boolean;
   completedDates?: string[];
   repeat?: GoalRepeat;
+  repeatDays?: number[];
   notificationsEnabled: boolean;
   notificationMessage: string;
   lastNotifiedDate?: string;
@@ -39,11 +40,14 @@ export const CATEGORY_META: Record<GoalCategory, { label: string; color: string;
 };
 
 export const REPEAT_META: Record<GoalRepeat, { label: string; short: string }> = {
-  none:     { label: "No repeat",  short: "" },
-  daily:    { label: "Every day",  short: "Daily" },
-  weekdays: { label: "Weekdays",   short: "Weekdays" },
-  weekly:   { label: "Every week", short: "Weekly" },
+  none:     { label: "No repeat",     short: "" },
+  daily:    { label: "Every day",     short: "Daily" },
+  weekdays: { label: "Weekdays",      short: "Weekdays" },
+  weekly:   { label: "Every week",    short: "Weekly" },
+  custom:   { label: "Custom days",   short: "Custom" },
 };
+
+export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function isCompletedToday(goal: Goal): boolean {
   const repeat = goal.repeat ?? "none";
@@ -63,6 +67,7 @@ export function isActiveToday(goal: Goal): boolean {
   if (repeat === "daily") return true;
   if (repeat === "weekdays") return dow >= 1 && dow <= 5;
   if (repeat === "weekly") return getDay(startDate) === dow;
+  if (repeat === "custom") return (goal.repeatDays ?? []).includes(dow);
   return false;
 }
 
