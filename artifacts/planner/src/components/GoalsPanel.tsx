@@ -1,37 +1,48 @@
-import { useState } from "react";
-import { format, isToday, isPast, parseISO, isFuture, startOfDay } from "date-fns";
-import { Plus, Bell, BellOff, CheckCircle2, Circle, Target, ChevronDown, ChevronRight, TriangleAlert } from "lucide-react";
-import { Goal, GoalCategory, CATEGORY_META, useGoals } from "@/hooks/useGoals";
+import { useState, useMemo } from "react";
+import { format, isToday, isPast, parseISO, startOfDay } from "date-fns";
+import {
+  Plus, Bell, BellOff, CheckCircle2, Circle, Target,
+  ChevronDown, ChevronRight, TriangleAlert, RefreshCw,
+} from "lucide-react";
+import {
+  Goal, GoalCategory, CATEGORY_META, REPEAT_META,
+  isCompletedToday, isActiveToday, useGoals,
+} from "@/hooks/useGoals";
 import { useNotifications } from "@/hooks/useNotifications";
 import GoalDialog from "@/components/GoalDialog";
 
 const ORDER: GoalCategory[] = ["must-do", "should-do", "nice-to-have"];
+const sortByCategory = (a: Goal, b: Goal) => ORDER.indexOf(a.category) - ORDER.indexOf(b.category);
 
 function groupGoals(goals: Goal[]) {
+  const recurring: Goal[] = [];
   const today: Goal[] = [];
   const upcoming: Goal[] = [];
   const overdue: Goal[] = [];
   const done: Goal[] = [];
 
   for (const g of goals) {
-    if (g.completed) {
-      done.push(g);
+    const repeat = g.repeat ?? "none";
+
+    if (repeat !== "none") {
+      if (isActiveToday(g)) recurring.push(g);
       continue;
     }
+
+    if (g.completed) { done.push(g); continue; }
+
     const d = parseISO(g.date);
     if (isToday(d)) today.push(g);
     else if (isPast(startOfDay(d))) overdue.push(g);
     else upcoming.push(g);
   }
 
-  const sortByCategory = (a: Goal, b: Goal) =>
-    ORDER.indexOf(a.category) - ORDER.indexOf(b.category);
-
   return {
+    recurring: recurring.sort(sortByCategory),
     overdue: overdue.sort(sortByCategory),
     today: today.sort(sortByCategory),
     upcoming: upcoming.sort(sortByCategory),
-    done: done.slice(-10).reverse(),
+    done: done.slice(-15).reverse(),
   };
 }
 
@@ -44,43 +55,58 @@ interface GoalItemProps {
 
 function GoalItem({ goal, onToggle, onEdit, onTestNotification }: GoalItemProps) {
   const meta = CATEGORY_META[goal.category];
+  const repeat = goal.repeat ?? "none";
+  const completedToday = isCompletedToday(goal);
+  const isRecurring = repeat !== "none";
+
   return (
     <div
       className={`group flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer
-        ${goal.completed ? "opacity-50 bg-muted/20 border-border/50" : "bg-card border-border hover:border-primary/30 hover:shadow-sm"}
-      `}
+        ${completedToday
+          ? "opacity-50 bg-muted/20 border-border/50"
+          : "bg-card border-border hover:border-primary/30 hover:shadow-sm"
+        }`}
       onClick={onEdit}
     >
       <button
         onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        className={`mt-0.5 shrink-0 transition-colors ${goal.completed ? "text-green-500" : "text-muted-foreground hover:text-primary"}`}
+        className={`mt-0.5 shrink-0 transition-colors ${completedToday ? "text-green-500" : "text-muted-foreground hover:text-primary"}`}
       >
-        {goal.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+        {completedToday ? <CheckCircle2 size={18} /> : <Circle size={18} />}
       </button>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-sm font-medium ${goal.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+          <span className={`text-sm font-medium ${completedToday ? "line-through text-muted-foreground" : "text-foreground"}`}>
             {goal.title}
           </span>
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${meta.bg} ${meta.text}`}>
             {meta.label}
           </span>
+          {isRecurring && (
+            <span className="flex items-center gap-0.5 text-[10px] font-medium text-primary/70 bg-primary/8 px-1.5 py-0.5 rounded-full border border-primary/15">
+              <RefreshCw size={9} />
+              {REPEAT_META[repeat].short}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-xs text-muted-foreground">
-            {format(parseISO(goal.date), "MMM d")}
-            {goal.time ? ` at ${goal.time}` : ""}
-          </span>
-          {goal.notificationsEnabled ? (
-            <Bell size={11} className="text-muted-foreground" />
+          {isRecurring ? (
+            <span className="text-xs text-muted-foreground">Repeats {REPEAT_META[repeat].label.toLowerCase()}</span>
           ) : (
-            <BellOff size={11} className="text-muted-foreground/40" />
+            <span className="text-xs text-muted-foreground">
+              {format(parseISO(goal.date), "MMM d")}
+              {goal.time ? ` at ${goal.time}` : ""}
+            </span>
           )}
+          {goal.notificationsEnabled
+            ? <Bell size={11} className="text-muted-foreground" />
+            : <BellOff size={11} className="text-muted-foreground/40" />
+          }
         </div>
       </div>
 
-      {goal.notificationsEnabled && !goal.completed && (
+      {goal.notificationsEnabled && !completedToday && (
         <button
           onClick={(e) => { e.stopPropagation(); onTestNotification(); }}
           title="Send test notification"
@@ -95,6 +121,7 @@ function GoalItem({ goal, onToggle, onEdit, onTestNotification }: GoalItemProps)
 
 interface SectionProps {
   title: string;
+  subtitle?: string;
   goals: Goal[];
   icon?: React.ReactNode;
   danger?: boolean;
@@ -104,9 +131,12 @@ interface SectionProps {
   onTestNotification: (goal: Goal) => void;
 }
 
-function Section({ title, goals, icon, danger, defaultOpen = true, onToggle, onEdit, onTestNotification }: SectionProps) {
+function Section({ title, subtitle, goals, icon, danger, defaultOpen = true, onToggle, onEdit, onTestNotification }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   if (goals.length === 0) return null;
+
+  const doneCount = goals.filter((g) => isCompletedToday(g)).length;
+  const hasProgress = goals.some((g) => (g.repeat ?? "none") !== "none");
 
   return (
     <div>
@@ -115,7 +145,11 @@ function Section({ title, goals, icon, danger, defaultOpen = true, onToggle, onE
         className={`flex items-center gap-1.5 w-full text-xs font-semibold uppercase tracking-wide mb-2 ${danger ? "text-red-600" : "text-muted-foreground"}`}
       >
         {icon}
-        {title} <span className="font-normal">({goals.length})</span>
+        {title}
+        <span className="font-normal">
+          {hasProgress ? ` (${doneCount}/${goals.length})` : ` (${goals.length})`}
+        </span>
+        {subtitle && <span className="font-normal normal-case ml-1 text-muted-foreground/60">{subtitle}</span>}
         <span className="ml-auto">{open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
       </button>
       {open && (
@@ -141,25 +175,22 @@ export default function GoalsPanel() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
 
-  const grouped = groupGoals(goals);
+  const grouped = useMemo(() => groupGoals(goals), [goals]);
+  const todayStr = format(new Date(), "MMM d");
 
-  function openNew() {
-    setEditingGoal(null);
-    setDialogOpen(true);
-  }
+  function openNew() { setEditingGoal(null); setDialogOpen(true); }
+  function openEdit(goal: Goal) { setEditingGoal(goal); setDialogOpen(true); }
 
-  function openEdit(goal: Goal) {
-    setEditingGoal(goal);
-    setDialogOpen(true);
-  }
-
-  function handleSave(data: Omit<Goal, "id" | "completed" | "lastNotifiedDate">) {
+  function handleSave(data: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">) {
     if (editingGoal) {
       updateGoal(editingGoal.id, data);
     } else {
       addGoal(data);
     }
   }
+
+  const totalGoals = goals.length;
+  const isEmpty = totalGoals === 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -170,12 +201,9 @@ export default function GoalsPanel() {
         </div>
         <div className="flex items-center gap-2">
           {permission !== "granted" && (
-            <button
-              onClick={requestPermission}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 transition-colors border border-amber-300/50"
-            >
-              <Bell size={12} />
-              Enable notifications
+            <button onClick={requestPermission}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 transition-colors border border-amber-300/50">
+              <Bell size={12} /> Enable notifications
             </button>
           )}
           {permission === "granted" && (
@@ -183,31 +211,35 @@ export default function GoalsPanel() {
               <Bell size={12} /> Notifications on
             </span>
           )}
-          <button
-            onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus size={14} />
-            New Goal
+          <button onClick={openNew}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors">
+            <Plus size={14} /> New Goal
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-5 space-y-2">
-        {goals.length === 0 && (
+        {isEmpty && (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <Target size={40} className="text-muted-foreground/30 mb-3" />
             <p className="text-sm font-medium text-muted-foreground">No goals yet</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Add goals and get notified when you miss them</p>
-            <button
-              onClick={openNew}
-              className="mt-4 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
+            <button onClick={openNew}
+              className="mt-4 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
               Add your first goal
             </button>
           </div>
         )}
 
+        <Section
+          title="Daily Recurring"
+          subtitle={todayStr}
+          goals={grouped.recurring}
+          icon={<RefreshCw size={11} />}
+          onToggle={toggleComplete}
+          onEdit={openEdit}
+          onTestNotification={sendNotification}
+        />
         <Section
           title="Overdue"
           goals={grouped.overdue}

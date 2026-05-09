@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
-import { Goal, GoalCategory, CATEGORY_META } from "@/hooks/useGoals";
+import { X, RefreshCw } from "lucide-react";
+import { Goal, GoalCategory, GoalRepeat, CATEGORY_META, REPEAT_META } from "@/hooks/useGoals";
 import { format } from "date-fns";
 
 interface GoalDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (goal: Omit<Goal, "id" | "completed" | "lastNotifiedDate">) => void;
+  onSave: (goal: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">) => void;
   onDelete?: (id: string) => void;
   editGoal?: Goal | null;
   initialDate?: string;
 }
 
 const CATEGORIES: GoalCategory[] = ["must-do", "should-do", "nice-to-have"];
+const REPEATS: GoalRepeat[] = ["none", "daily", "weekdays", "weekly"];
 
 const DEFAULT_MESSAGES: Record<GoalCategory, string> = {
-  "must-do": "This was a must-do goal and it's not done yet. Time to focus!",
-  "should-do": "You planned to do this today — don't let it slip!",
+  "must-do":      "This was a must-do goal and it's not done yet. Time to focus!",
+  "should-do":    "You planned to do this today — don't let it slip!",
   "nice-to-have": "You wanted to do this. There's still time!",
 };
 
@@ -25,6 +26,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
   const [category, setCategory] = useState<GoalCategory>("must-do");
   const [date, setDate] = useState(initialDate ?? format(new Date(), "yyyy-MM-dd"));
   const [time, setTime] = useState("");
+  const [repeat, setRepeat] = useState<GoalRepeat>("none");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationMessage, setNotificationMessage] = useState(DEFAULT_MESSAGES["must-do"]);
   const [messageEdited, setMessageEdited] = useState(false);
@@ -35,6 +37,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       setCategory(editGoal.category);
       setDate(editGoal.date);
       setTime(editGoal.time ?? "");
+      setRepeat(editGoal.repeat ?? "none");
       setNotificationsEnabled(editGoal.notificationsEnabled);
       setNotificationMessage(editGoal.notificationMessage);
       setMessageEdited(true);
@@ -43,6 +46,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       setCategory("must-do");
       setDate(initialDate ?? format(new Date(), "yyyy-MM-dd"));
       setTime("");
+      setRepeat("none");
       setNotificationsEnabled(true);
       setNotificationMessage(DEFAULT_MESSAGES["must-do"]);
       setMessageEdited(false);
@@ -51,9 +55,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
 
   function handleCategoryChange(c: GoalCategory) {
     setCategory(c);
-    if (!messageEdited) {
-      setNotificationMessage(DEFAULT_MESSAGES[c]);
-    }
+    if (!messageEdited) setNotificationMessage(DEFAULT_MESSAGES[c]);
   }
 
   if (!open) return null;
@@ -66,11 +68,14 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       category,
       date,
       time: time || undefined,
+      repeat,
       notificationsEnabled,
       notificationMessage,
     });
     onClose();
   }
+
+  const isRepeating = repeat !== "none";
 
   return (
     <div
@@ -83,26 +88,21 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
           <h2 className="text-base font-semibold text-foreground">
             {editGoal ? "Edit Goal" : "New Goal"}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
+          <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Goal title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
-              required
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Goal title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition"
+            required
+          />
 
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-2">Category</label>
@@ -110,15 +110,9 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
               {CATEGORIES.map((c) => {
                 const meta = CATEGORY_META[c];
                 return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => handleCategoryChange(c)}
+                  <button key={c} type="button" onClick={() => handleCategoryChange(c)}
                     className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition-all
-                      ${category === c
-                        ? `${meta.bg} ${meta.text} ${meta.border} border`
-                        : "border-border text-muted-foreground hover:border-border/80 hover:bg-muted"
-                      }`}
+                      ${category === c ? `${meta.bg} ${meta.text} ${meta.border} border` : "border-border text-muted-foreground hover:bg-muted"}`}
                   >
                     {meta.label}
                   </button>
@@ -127,9 +121,29 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-2">
+              <span className="flex items-center gap-1.5"><RefreshCw size={11} /> Repeat</span>
+            </label>
+            <div className="grid grid-cols-4 gap-1.5">
+              {REPEATS.map((r) => (
+                <button key={r} type="button" onClick={() => setRepeat(r)}
+                  className={`py-1.5 px-1 rounded-lg text-xs font-medium border transition-all
+                    ${repeat === r
+                      ? "bg-primary/10 text-primary border-primary/30"
+                      : "border-border text-muted-foreground hover:bg-muted"}`}
+                >
+                  {REPEAT_META[r].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Target Date</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
+                {isRepeating ? "Start Date" : "Target Date"}
+              </label>
               <input
                 type="date"
                 value={date}
@@ -138,7 +152,9 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Due Time (optional)</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
+                {isRepeating ? "Daily due time" : "Due Time (optional)"}
+              </label>
               <input
                 type="time"
                 value={time}
@@ -147,6 +163,12 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
               />
             </div>
           </div>
+
+          {isRepeating && (
+            <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs text-primary/80">
+              This goal will appear every {repeat === "weekly" ? "week on the same day" : repeat === "weekdays" ? "weekday (Mon–Fri)" : "day"} starting {format(new Date(date + "T00:00:00"), "MMM d")}. Your progress resets each day.
+            </div>
+          )}
 
           <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
             <div className="flex items-center justify-between">
@@ -159,12 +181,9 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
                 onClick={() => setNotificationsEnabled((v) => !v)}
                 className={`relative w-10 h-5.5 rounded-full transition-colors ${notificationsEnabled ? "bg-primary" : "bg-muted-foreground/30"}`}
               >
-                <span
-                  className={`absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow-sm transition-transform ${notificationsEnabled ? "translate-x-5" : "translate-x-0.5"}`}
-                />
+                <span className={`absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow-sm transition-transform ${notificationsEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
               </button>
             </div>
-
             {notificationsEnabled && (
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Custom notification message</label>
@@ -181,27 +200,18 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
 
           <div className="flex items-center gap-2 pt-1">
             {editGoal && onDelete && (
-              <button
-                type="button"
-                onClick={() => { onDelete(editGoal.id); onClose(); }}
-                className="px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-              >
+              <button type="button" onClick={() => { onDelete(editGoal.id); onClose(); }}
+                className="px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
                 Delete
               </button>
             )}
             <div className="flex-1" />
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-secondary-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
-            >
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-secondary-foreground bg-secondary hover:bg-secondary/80 rounded-lg transition-colors">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={!title.trim()}
-              className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-            >
+            <button type="submit" disabled={!title.trim()}
+              className="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors">
               {editGoal ? "Save" : "Add Goal"}
             </button>
           </div>
