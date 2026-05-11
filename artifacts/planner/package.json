@@ -11,7 +11,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "electron:dev": "electron .",
     "electron:build": "pnpm run build && electron-builder --config electron-builder.config.cjs",
-    "electron:win": "pnpm run build && electron-builder --win --config electron-builder.config.cjs"
+    "electron:win": "pnpm run build && electron-builder --win --config electron-builder.config.cjs",
+    "electron:mac": "pnpm run build && electron-builder --mac --config electron-builder.config.cjs",
+    "electron:linux": "pnpm run build && electron-builder --linux --config electron-builder.config.cjs",
+    "electron:all": "pnpm run build && electron-builder --win --mac --linux --config electron-builder.config.cjs"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
