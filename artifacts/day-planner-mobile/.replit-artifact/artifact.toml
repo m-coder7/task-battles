@@ -1,6 +1,6 @@
 kind = "mobile"
 previewPath = "/mobile/"
-title = "Day Planner Mobile"
+title = "Task battle"
 version = "1.0.0"
 id = "artifacts/day-planner-mobile"
 router = "expo-domain"
