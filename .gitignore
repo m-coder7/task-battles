@@ -48,3 +48,6 @@ Thumbs.db
 .cache/
 .local/
 node_modules/
+node_modules/
+project.zip
+node_modules/
