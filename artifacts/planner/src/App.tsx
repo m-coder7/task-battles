@@ -4,7 +4,7 @@ import {
   addWeeks, subWeeks, addDays, parseISO, isToday,
 } from "date-fns";
 import {
-  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon, Flame,
+  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Flame,
   Target, Swords, List, Search, Clock, ChevronRight,
   StickyNote, BookOpen, Settings, LogOut, Monitor,
 } from "lucide-react";
@@ -21,8 +21,7 @@ import DiaryPanel from "@/components/DiaryPanel";
 import SearchModal from "@/components/SearchModal";
 import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
-import { useGoals, isActiveToday, isCompletedToday } from "@/hooks/useGoals";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/hooks/useAuth";
 import AuthScreen from "@/components/AuthScreen";
 
@@ -83,49 +82,6 @@ export default function App() {
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
   const { mode, setMode, themeIcon, themeLabel } = useTheme();
-  const notifications = useNotifications(goals, markNotified);
-
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthScreen />;
-  }
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      // Cmd/Ctrl+K → search
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setSearchOpen(true);
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "n" && section === "calendar") {
-        openNew(format(selectedDate, "yyyy-MM-dd"));
-      }
-      if (e.key === "t") {
-        goToday();
-        setView("today");
-      }
-      if (e.key === "1") setView("today");
-      if (e.key === "2") setView("month");
-      if (e.key === "3") setView("week");
-      if (e.key === "4") setView("day");
-      if (e.key === "5") setView("agenda");
-      if (e.key === "/") { e.preventDefault(); setSearchOpen(true); }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [section, selectedDate]);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
@@ -163,13 +119,13 @@ export default function App() {
     }
   }, [view, currentMonth, selectedDate]);
 
-  const goToday = () => {
+  const goToday = useCallback(() => {
     const now = new Date();
     setSelectedDate(now);
     setCurrentMonth(now);
-  };
+  }, []);
 
-  const headerLabel = () => {
+  const headerLabel = useCallback(() => {
     if (view === "today") return "Today";
     if (view === "month") return format(currentMonth, "MMMM yyyy");
     if (view === "agenda") return "Upcoming";
@@ -179,14 +135,13 @@ export default function App() {
       return `${format(ws, "MMM d")} – ${format(we, "MMM d, yyyy")}`;
     }
     return format(selectedDate, "EEEE, MMMM d, yyyy");
-  };
+  }, [view, currentMonth, selectedDate]);
 
-  const overdueGoals = goals.filter(
+  const overdueGoals = useMemo(() => goals.filter(
     (g) => !g.completed && (g.repeat ?? "none") === "none" &&
       new Date(g.date) < new Date(new Date().toDateString())
-  );
+  ), [goals]);
 
-  // Upcoming events for sidebar widget (next 5 events from today)
   const upcomingEvents = useMemo(() => {
     const today = format(new Date(), "yyyy-MM-dd");
     const now = new Date();
@@ -207,22 +162,66 @@ export default function App() {
       .slice(0, 4);
   }, [events]);
 
-  const navItems: { id: Section; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "calendar", label: "Calendar", icon: <Calendar size={15} /> },
-    { id: "goals",    label: "Goals",    icon: <Target size={15} />, badge: overdueGoals.length || undefined },
-    { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
-    { id: "notes",    label: "Notes",    icon: <StickyNote size={15} /> },
-    { id: "diary",    label: "Diary",    icon: <BookOpen size={15} /> },
-    { id: "settings", label: "Settings", icon: <Settings size={15} /> },
-  ];
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "n" && section === "calendar") {
+        openNew(format(selectedDate, "yyyy-MM-dd"));
+      }
+      if (e.key === "t") {
+        goToday();
+        setView("today");
+      }
+      if (e.key === "1") setView("today");
+      if (e.key === "2") setView("month");
+      if (e.key === "3") setView("week");
+      if (e.key === "4") setView("day");
+      if (e.key === "5") setView("agenda");
+      if (e.key === "/") { e.preventDefault(); setSearchOpen(true); }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [section, selectedDate, openNew, goToday]);
 
-  const calendarViews: { id: View; icon: React.ReactNode; label: string; shortcut: string }[] = [
-    { id: "today",  icon: <Sun size={13} />,         label: "Today",  shortcut: "1" },
-    { id: "month",  icon: <LayoutGrid size={13} />,  label: "Month",  shortcut: "2" },
-    { id: "week",   icon: <Calendar size={13} />,    label: "Week",   shortcut: "3" },
-    { id: "day",    icon: <CalendarDays size={13} />, label: "Day",   shortcut: "4" },
-    { id: "agenda", icon: <List size={13} />,         label: "Agenda", shortcut: "5" },
-  ];
+  const navItems = useMemo(() => {
+    const items: { id: Section; label: string; icon: React.ReactNode; badge?: number }[] = [
+      { id: "calendar", label: "Calendar", icon: <Calendar size={15} /> },
+      { id: "goals",    label: "Goals",    icon: <Target size={15} />, badge: overdueGoals.length || undefined },
+      { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
+      { id: "notes",    label: "Notes",    icon: <StickyNote size={15} /> },
+      { id: "diary",    label: "Diary",    icon: <BookOpen size={15} /> },
+      { id: "settings", label: "Settings", icon: <Settings size={15} /> },
+    ];
+    return items;
+  }, [overdueGoals.length]);
+
+  const calendarViews = useMemo(() => [
+    { id: "today" as View,  icon: <Sun size={13} />,         label: "Today",  shortcut: "1" },
+    { id: "month" as View,  icon: <LayoutGrid size={13} />,  label: "Month",  shortcut: "2" },
+    { id: "week" as View,   icon: <Calendar size={13} />,    label: "Week",   shortcut: "3" },
+    { id: "day" as View,    icon: <CalendarDays size={13} />, label: "Day",   shortcut: "4" },
+    { id: "agenda" as View, icon: <List size={13} />,         label: "Agenda", shortcut: "5" },
+  ], []);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
