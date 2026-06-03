@@ -52,6 +52,10 @@ VITE_FIREBASE_PROJECT_ID = "day-planner-5f697"
 VITE_FIREBASE_STORAGE_BUCKET = "day-planner-5f697.firebasestorage.app"
 VITE_FIREBASE_MESSAGING_SENDER_ID = "1030553395660"
 VITE_FIREBASE_APP_ID = "1:1030553395660:web:38b60792dacd7daa833d69"
+VITE_SUPABASE_URL = "https://mzkjnmbyryzfcpozjccq.supabase.co"
+VITE_SUPABASE_ANON_KEY = "sb_publishable_lYoxybMAD2JIYd9WvB73Jw_NijzRLzw"
+EXPO_PUBLIC_SUPABASE_URL = "https://mzkjnmbyryzfcpozjccq.supabase.co"
+EXPO_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_lYoxybMAD2JIYd9WvB73Jw_NijzRLzw"
 
 [nix]
 packages = ["zip"]

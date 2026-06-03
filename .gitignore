@@ -51,3 +51,6 @@ node_modules/
 node_modules/
 project.zip
 node_modules/
+
+# Tauri
+artifacts/planner/src-tauri/target/
