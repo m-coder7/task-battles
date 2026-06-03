@@ -23,6 +23,7 @@ import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
 import { useGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import AuthScreen from "@/components/AuthScreen";
 
 type View = "today" | "month" | "week" | "day" | "agenda";
@@ -82,6 +83,58 @@ export default function App() {
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
   const { mode, setMode, themeIcon, themeLabel } = useTheme();
+
+  // Handle OAuth callback from URL hash (e.g. email confirmation)
+  useEffect(() => {
+    async function processHash() {
+      const hash = window.location.hash;
+      if (hash && hash.includes("access_token=")) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+        if (accessToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken ?? "",
+          });
+          if (!error) {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          }
+        }
+      }
+    }
+    processHash();
+  }, []);
+
+  // Handle deep-link auth callbacks on Tauri
+  useEffect(() => {
+    if (typeof window === "undefined" || !(window as any).__TAURI_INTERNALS__) return;
+    let unsub: (() => void) | undefined;
+    (async () => {
+      try {
+        const { onOpenUrl } = await import("@tauri-apps/plugin-deep-link");
+        unsub = await onOpenUrl((urls: string[]) => {
+          for (const urlStr of urls) {
+            if (urlStr.includes("access_token=")) {
+              const url = new URL(urlStr);
+              const params = new URLSearchParams(url.hash.substring(1));
+              const accessToken = params.get("access_token");
+              const refreshToken = params.get("refresh_token");
+              if (accessToken) {
+                supabase.auth.setSession({
+                  access_token: accessToken,
+                  refresh_token: refreshToken ?? "",
+                });
+              }
+            }
+          }
+        });
+      } catch {
+        // ignore if deep-link plugin not available
+      }
+    })();
+    return () => { unsub?.(); };
+  }, []);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
