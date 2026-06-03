@@ -2,95 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Daily Progress</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: rgba(20, 20, 20, 0.92);
-      background: rgba(10, 10, 10, 0.72);
-      backdrop-filter: blur(16px) saturate(1.4);
-      -webkit-backdrop-filter: blur(16px) saturate(1.4);
-      color: #e5e5e5;
+      font-family: system-ui, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       width: 100%; height: 100%;
-      padding: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+      padding: 16px;
     }
-    .drag-handle {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 28px;
-      cursor: grab;
-      -webkit-app-region: drag;
-      z-index: 10;
-    }
-    .ring { width: 90px; height: 90px; position: relative; margin-top: 8px; }
-    .ring svg { transform: rotate(-90deg); }
-    .ring-bg { stroke: rgba(255,255,255,0.08); }
-    .ring-fill { stroke: #FF9500; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
-    .percent {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 20px;
-      font-weight: 700;
-      color: #FF9500;
-    }
-    .label { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 10px; }
-    .sub { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 4px; }
+    h1 { font-size: 14px; color: #FF9500; margin-bottom: 8px; }
+    .pct { font-size: 28px; font-weight: bold; color: #FF9500; }
+    .sub { font-size: 12px; color: #888; margin-top: 4px; }
   </style>
 </head>
 <body>
-  <div class="drag-handle"></div>
-  <div class="ring">
-    <svg viewBox="0 0 100 100" width="90" height="90">
-      <circle class="ring-bg" cx="50" cy="50" r="42" fill="none" stroke-width="7" />
-      <circle id="progress" class="ring-fill" cx="50" cy="50" r="42" fill="none" stroke-width="7"
-        stroke-dasharray="263.9" stroke-dashoffset="263.9" />
-    </svg>
-    <div id="percent" class="percent">0%</div>
-  </div>
-  <div class="label">Goals Done</div>
-  <div id="sub" class="sub">0 / 0</div>
+  <h1>Daily Progress</h1>
+  <div class="pct" id="pct">0%</div>
+  <div class="sub" id="sub">0 / 0</div>
   <script>
-    function getGoalsKey() {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('planner_goals_'));
-      return keys.length ? keys[0] : 'planner_goals_anon';
-    }
-    function getGoals() {
-      try { return JSON.parse(localStorage.getItem(getGoalsKey()) || '[]'); }
-      catch { return []; }
-    }
-    function isGoalActiveToday(g) {
-      const today = new Date().toISOString().slice(0, 10);
-      const dow = new Date().getDay();
-      if (!g.repeat || g.repeat === 'none') return g.date === today;
-      if (g.repeat === 'daily') return true;
-      if (g.repeat === 'weekdays') return dow >= 1 && dow <= 5;
-      if (g.repeat === 'weekly') return new Date(g.date).getDay() === dow;
-      if (g.repeat === 'custom') return (g.repeatDays || []).includes(dow);
-      return false;
-    }
-    function isGoalDone(g) {
-      const today = new Date().toISOString().slice(0, 10);
-      if (g.completed) return true;
-      if (Array.isArray(g.completedDates) && g.completedDates.includes(today)) return true;
-      return false;
-    }
     function render() {
-      const goals = getGoals().filter(isGoalActiveToday);
-      const done = goals.filter(isGoalDone).length;
-      const total = goals.length || 1;
-      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-      const offset = 263.9 - (263.9 * pct / 100);
-      document.getElementById('progress').style.strokeDashoffset = offset;
-      document.getElementById('percent').textContent = pct + '%';
-      document.getElementById('sub').textContent = done + ' / ' + total;
+      try {
+        const key = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
+        const goals = JSON.parse(localStorage.getItem(key) || '[]');
+        const today = new Date().toISOString().slice(0, 10);
+        const active = goals.filter(g => {
+          if (!g.repeat || g.repeat === 'none') return g.date === today;
+          if (g.repeat === 'daily') return true;
+          const dow = new Date().getDay();
+          if (g.repeat === 'weekdays') return dow >= 1 && dow <= 5;
+          if (g.repeat === 'weekly') return new Date(g.date).getDay() === dow;
+          if (g.repeat === 'custom') return (g.repeatDays || []).includes(dow);
+          return false;
+        });
+        const done = active.filter(g => g.completed || (g.completedDates || []).includes(today)).length;
+        const total = active.length || 1;
+        const pct = Math.round((done / total) * 100);
+        document.getElementById('pct').textContent = pct + '%';
+        document.getElementById('sub').textContent = done + ' / ' + total;
+      } catch (e) {
+        document.getElementById('pct').textContent = 'Err';
+      }
     }
     render();
     setInterval(render, 3000);

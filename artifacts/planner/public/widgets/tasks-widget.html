@@ -2,181 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Today's Tasks</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: rgba(20, 20, 20, 0.92);
-      background: rgba(10, 10, 10, 0.72);
-      backdrop-filter: blur(16px) saturate(1.4);
-      -webkit-backdrop-filter: blur(16px) saturate(1.4);
-      color: #e5e5e5;
-      padding: 14px;
+      font-family: system-ui, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 16px;
       width: 100%; height: 100%;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.04);
     }
-    .drag-handle {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 28px;
-      cursor: grab;
-      -webkit-app-region: drag;
-      z-index: 10;
-    }
-    .header {
-      font-size: 11px;
-      font-weight: 700;
-      color: #FF9500;
-      margin-bottom: 10px;
-      margin-top: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      pointer-events: none;
-      user-select: none;
-    }
-    .task {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
-      font-size: 12.5px;
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
-    .task:hover { opacity: 0.8; }
-    .task:last-child { border-bottom: none; }
-    .checkbox {
-      width: 14px; height: 14px;
-      border: 2px solid rgba(255, 149, 0, 0.7);
-      border-radius: 3px;
-      flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.2s;
-      cursor: pointer;
-      -webkit-app-region: no-drag;
-    }
-    .checkbox:hover { border-color: #FF9500; }
-    .checkbox.done { background: #FF9500; border-color: #FF9500; }
-    .checkbox.done::after {
-      content: '';
-      width: 6px; height: 3px;
-      border-left: 2px solid rgba(10,10,10,0.9);
-      border-bottom: 2px solid rgba(10,10,10,0.9);
-      transform: rotate(-45deg);
-    }
-    .title { flex: 1; pointer-events: none; }
-    .title.done { text-decoration: line-through; opacity: 0.4; }
-    .empty { font-size: 12px; color: rgba(255,255,255,0.3); text-align: center; padding: 16px 0; }
-    .meta {
-      font-size: 10px;
-      color: rgba(255,255,255,0.35);
-      margin-top: 8px;
-      text-align: center;
-      pointer-events: none;
-      user-select: none;
-    }
+    h1 { font-size: 14px; color: #FF9500; margin-bottom: 12px; }
+    .task { font-size: 13px; padding: 4px 0; border-bottom: 1px solid #333; }
+    .task.done { text-decoration: line-through; opacity: 0.5; }
   </style>
 </head>
 <body>
-  <div class="drag-handle"></div>
-  <div class="header">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF9500" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-    Today's Tasks
-  </div>
-  <div id="tasks"></div>
-  <div id="meta" class="meta"></div>
+  <h1>Today's Tasks</h1>
+  <div id="tasks">Loading...</div>
   <script>
-    function getGoalsKey() {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('planner_goals_'));
-      return keys.length ? keys[0] : 'planner_goals_anon';
-    }
-    function getGoals() {
-      try { return JSON.parse(localStorage.getItem(getGoalsKey()) || '[]'); }
-      catch { return []; }
-    }
-    function setGoals(goals) {
-      localStorage.setItem(getGoalsKey(), JSON.stringify(goals));
-      window.dispatchEvent(new StorageEvent('storage', { key: getGoalsKey() }));
-    }
-    function getUserKey() {
-      const keys = Object.keys(localStorage).filter(k => k.startsWith('planner_events_'));
-      return keys.length ? keys[0].replace('planner_events_', '') : 'anon';
-    }
-    function isGoalActiveToday(g) {
-      const today = new Date().toISOString().slice(0, 10);
-      const dow = new Date().getDay();
-      if (!g.repeat || g.repeat === 'none') return g.date === today;
-      if (g.repeat === 'daily') return true;
-      if (g.repeat === 'weekdays') return dow >= 1 && dow <= 5;
-      if (g.repeat === 'weekly') return new Date(g.date).getDay() === dow;
-      if (g.repeat === 'custom') return (g.repeatDays || []).includes(dow);
-      return false;
-    }
-    function isGoalDone(g) {
-      const today = new Date().toISOString().slice(0, 10);
-      if (g.completed) return true;
-      if (Array.isArray(g.completedDates) && g.completedDates.includes(today)) return true;
-      return false;
-    }
-    function toggleGoal(g) {
-      const today = new Date().toISOString().slice(0, 10);
-      if (!g.completedDates) g.completedDates = [];
-      if (g.completedDates.includes(today)) {
-        g.completedDates = g.completedDates.filter(d => d !== today);
-        g.completed = false;
-      } else {
-        g.completedDates.push(today);
-        g.completed = true;
-      }
-    }
-    let lastClickTime = 0;
-    function handleClick(g, e) {
-      e.stopPropagation();
-      const now = Date.now();
-      if (now - lastClickTime < 400) {
-        // Double click: open main app
-        if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-          window.__TAURI_INTERNALS__.invoke('open_external', { url: 'taskbattles://open' }).catch(()=>{});
-        }
-        return;
-      }
-      lastClickTime = now;
-      // Single click: toggle
-      const goals = getGoals();
-      const found = goals.find(x => x.id === g.id);
-      if (found) {
-        toggleGoal(found);
-        setGoals(goals);
-        render();
-      }
-    }
     function render() {
-      const goals = getGoals().filter(isGoalActiveToday);
-      const container = document.getElementById('tasks');
-      const meta = document.getElementById('meta');
-      if (!goals.length) {
-        container.innerHTML = '<div class="empty">No goals for today</div>';
-        meta.textContent = '';
-        return;
+      try {
+        const key = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
+        const goals = JSON.parse(localStorage.getItem(key) || '[]');
+        const today = new Date().toISOString().slice(0, 10);
+        const container = document.getElementById('tasks');
+        if (!goals.length) {
+          container.innerHTML = '<div class="task">No goals</div>';
+          return;
+        }
+        const todayGoals = goals.filter(g => {
+          if (!g.repeat || g.repeat === 'none') return g.date === today;
+          if (g.repeat === 'daily') return true;
+          const dow = new Date().getDay();
+          if (g.repeat === 'weekdays') return dow >= 1 && dow <= 5;
+          if (g.repeat === 'weekly') return new Date(g.date).getDay() === dow;
+          if (g.repeat === 'custom') return (g.repeatDays || []).includes(dow);
+          return false;
+        });
+        if (!todayGoals.length) {
+          container.innerHTML = '<div class="task">No goals for today</div>';
+          return;
+        }
+        container.innerHTML = todayGoals.map(g => {
+          const done = g.completed || (g.completedDates || []).includes(today);
+          return `<div class="task ${done ? 'done' : ''}">${g.title}</div>`;
+        }).join('');
+      } catch (e) {
+        document.getElementById('tasks').innerHTML = '<div class="task">Error: ' + e.message + '</div>';
       }
-      const done = goals.filter(isGoalDone).length;
-      meta.textContent = `${done}/${goals.length} completed`;
-      container.innerHTML = goals.slice(0, 8).map(g => {
-        const completed = isGoalDone(g);
-        return `<div class="task" onclick="handleClick(${JSON.stringify(g).replace(/"/g,'&quot;')}, event)">
-          <div class="checkbox ${completed ? 'done' : ''}"></div>
-          <div class="title ${completed ? 'done' : ''}">${g.title}</div>
-        </div>`;
-      }).join('');
     }
     render();
     setInterval(render, 3000);
