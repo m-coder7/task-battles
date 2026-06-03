@@ -83,6 +83,7 @@ export default function App() {
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
   const { mode, setMode, themeIcon, themeLabel } = useTheme();
+  const notifications = useNotifications(goals, markNotified);
 
   if (authLoading) {
     return (
@@ -95,8 +96,6 @@ export default function App() {
   if (!user) {
     return <AuthScreen />;
   }
-
-  useNotifications(goals, markNotified);
 
   // Keyboard shortcuts
   useEffect(() => {

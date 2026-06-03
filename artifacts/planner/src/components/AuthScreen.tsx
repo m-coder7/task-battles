@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { Mail, Lock, LogIn, UserPlus } from "lucide-react";
+import { Mail, Lock, LogIn, UserPlus, Inbox, ArrowLeft } from "lucide-react";
 
 export default function AuthScreen() {
   const { signUp, signIn } = useAuth();
@@ -9,6 +9,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -16,11 +17,38 @@ export default function AuthScreen() {
     setLoading(true);
 
     const fn = mode === "signin" ? signIn : signUp;
-    const { error: err } = await fn(email, password);
-    if (err) {
-      setError(err.message);
+    const result = await fn(email, password);
+    if (result.error) {
+      setError(result.error.message);
+    } else if (mode === "signup" && "needsConfirmation" in result && result.needsConfirmation) {
+      setConfirmationSent(true);
     }
     setLoading(false);
+  }
+
+  if (confirmationSent) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+        <div className="w-full max-w-sm p-8 rounded-2xl border border-border bg-card shadow-sm text-center">
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Inbox size={24} className="text-primary" />
+            </div>
+          </div>
+          <h2 className="text-lg font-medium mb-2">Check your email</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            We sent a confirmation link to <strong className="text-foreground">{email}</strong>. Click it to activate your account, then sign in.
+          </p>
+          <button
+            onClick={() => { setConfirmationSent(false); setMode("signin"); }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <ArrowLeft size={15} />
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
