@@ -4,23 +4,25 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
+// Tauri sets these env vars during its dev/build lifecycle.
+// In Replit the workflow injects PORT and BASE_PATH.
+const isTauri =
+  process.env.TAURI_ENV_PLATFORM !== undefined ||
+  process.env.TAURI_DEV_HOST !== undefined;
 
-if (!rawPort) {
+const rawPort = process.env.PORT;
+if (!isTauri && !rawPort) {
   throw new Error(
     "PORT environment variable is required but was not provided.",
   );
 }
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
+const port = rawPort ? Number(rawPort) : 5173;
+if (rawPort && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
+const basePath = process.env.BASE_PATH ?? "/";
+if (!isTauri && !process.env.BASE_PATH) {
   throw new Error(
     "BASE_PATH environment variable is required but was not provided.",
   );

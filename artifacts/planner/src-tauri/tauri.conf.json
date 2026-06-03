@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Task Battles",
+  "version": "1.0.0",
+  "identifier": "com.taskbattles.app",
+  "build": {
+    "frontendDist": "../dist/public",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "PORT=5173 BASE_PATH=/ pnpm run dev",
+    "beforeBuildCommand": "PORT=5173 BASE_PATH=/ pnpm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Task Battles",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "titleBarStyle": "overlay",
+        "hiddenTitle": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https:; img-src 'self' data: blob: https:; font-src 'self' data: https:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
