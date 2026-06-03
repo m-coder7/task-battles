@@ -98,6 +98,27 @@ export function useRivalry(myStats: { completed: number; total: number }) {
     setLoading(true); setError(null);
     try {
       let inviteCode = generateInviteCode();
+
+      // Check if Supabase table exists by doing a lightweight query
+      const { error: probeErr } = await supabase.from("profiles").select("invite_code", { head: true, count: "exact" }).limit(0);
+      const tableMissing = probeErr && (
+        probeErr.message.includes("relation") ||
+        probeErr.message.includes("does not exist") ||
+        probeErr.message.includes("404") ||
+        probeErr.code === "PGRST116"
+      );
+
+      if (tableMissing) {
+        // Fallback: store profile locally without Supabase
+        const p: RivalryProfile = { userId, displayName, inviteCode };
+        localStorage.setItem(getProfileKey(userId), JSON.stringify(p));
+        setProfile(p);
+        setError("Profile created locally. Rivalry features that need a server are limited.");
+        setLoading(false);
+        return;
+      }
+
+      // Table exists — ensure invite code is unique
       for (;;) {
         const { data } = await supabase.from("profiles").select("invite_code").eq("invite_code", inviteCode).maybeSingle();
         if (!data) break;
@@ -110,7 +131,11 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       setProfile(p);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to create profile";
-      setError(msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network") ? "No connection. Check your internet and try again." : msg);
+      if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setError("No connection. Check your internet and try again.");
+      } else {
+        setError(`Failed to create profile: ${msg}`);
+      }
     } finally { setLoading(false); }
   }, [userId]);
 
@@ -128,8 +153,15 @@ export function useRivalry(myStats: { completed: number; total: number }) {
     try {
       const clean = code.trim().toUpperCase();
       if (clean === profile?.inviteCode) { setError("That's your own invite code!"); return; }
+
       const { data, error: err } = await supabase.from("profiles").select("*").eq("invite_code", clean).maybeSingle();
-      if (err) throw err;
+      if (err) {
+        if (err.message.includes("relation") || err.message.includes("does not exist")) {
+          setError("Rivalry server is not set up yet. Please create the required database tables in Supabase.");
+          return;
+        }
+        throw err;
+      }
       if (!data) { setError("Invite code not found. Ask your friend to double check."); return; }
       const info: RivalInfo = { userId: (data as Record<string,string>).user_id, displayName: (data as Record<string,string>).display_name, inviteCode: (data as Record<string,string>).invite_code };
       if (userId) localStorage.setItem(getRivalKey(userId), clean);
