@@ -1,8 +1,18 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+
+// Load root .env file so PORT and BASE_PATH can be defined there
+const envDir = path.resolve(import.meta.dirname, "..", "..");
+const loadedEnv = loadEnv("development", envDir, "");
+// Only apply .env values if the env var is not already set (allows overrides)
+Object.keys(loadedEnv).forEach((key) => {
+  if (process.env[key] === undefined) {
+    process.env[key] = loadedEnv[key];
+  }
+});
 
 // Tauri sets these env vars during its dev/build lifecycle.
 // In Replit the workflow injects PORT and BASE_PATH.
@@ -29,6 +39,7 @@ if (!isTauri && !process.env.BASE_PATH) {
 }
 
 export default defineConfig({
+  envDir,
   base: basePath,
   plugins: [
     react(),
