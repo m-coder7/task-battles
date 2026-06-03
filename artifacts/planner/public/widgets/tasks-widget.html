@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Today's Tasks</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #f2f2f2;
+      padding: 12px;
+      width: 100%; height: 100%;
+    }
+    .header { font-size: 12px; font-weight: 600; color: #FF9500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .task { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #222; font-size: 13px; }
+    .task:last-child { border-bottom: none; }
+    .checkbox { width: 16px; height: 16px; border: 2px solid #FF9500; border-radius: 4px; flex-shrink: 0; }
+    .checkbox.done { background: #FF9500; }
+    .title { flex: 1; }
+    .title.done { text-decoration: line-through; opacity: 0.5; }
+    .empty { font-size: 12px; color: #737373; text-align: center; padding: 16px 0; }
+  </style>
+</head>
+<body>
+  <div class="header">Today's Tasks</div>
+  <div id="tasks"></div>
+  <script>
+    function render() {
+      const key = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
+      const goals = JSON.parse(localStorage.getItem(key) || '[]');
+      const today = new Date().toISOString().slice(0, 10);
+      const container = document.getElementById('tasks');
+      const todayGoals = goals.filter(g => {
+        if (g.repeat && g.repeat !== 'none') {
+          const dow = new Date().getDay();
+          if (g.repeat === 'daily') return true;
+          if (g.repeat === 'weekdays') return dow >= 1 && dow <= 5;
+          if (g.repeat === 'weekly') return new Date(g.date).getDay() === dow;
+          if (g.repeat === 'custom') return (g.repeatDays || []).includes(dow);
+          return false;
+        }
+        return g.date === today;
+      });
+      if (!todayGoals.length) {
+        container.innerHTML = '<div class="empty">No goals for today</div>';
+        return;
+      }
+      container.innerHTML = todayGoals.slice(0, 5).map(g => {
+        const done = g.completed || (g.completedDates || []).includes(today);
+        return `<div class="task">
+          <div class="checkbox ${done ? 'done' : ''}"></div>
+          <div class="title ${done ? 'done' : ''}">${g.title}</div>
+        </div>`;
+      }).join('');
+    }
+    render();
+    setInterval(render, 30000);
+  </script>
+</body>
+</html>

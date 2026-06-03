@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Progress</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #f2f2f2;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      width: 100%; height: 100%;
+      padding: 8px;
+    }
+    .ring { width: 80px; height: 80px; }
+    .ring svg { transform: rotate(-90deg); }
+    .ring-bg { stroke: #222; }
+    .ring-fill { stroke: #FF9500; stroke-linecap: round; transition: stroke-dashoffset 0.5s; }
+    .percent { font-size: 18px; font-weight: 700; color: #FF9500; margin-top: 6px; }
+    .label { font-size: 11px; color: #737373; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="ring">
+    <svg viewBox="0 0 100 100" width="80" height="80">
+      <circle class="ring-bg" cx="50" cy="50" r="42" fill="none" stroke-width="8" />
+      <circle id="progress" class="ring-fill" cx="50" cy="50" r="42" fill="none" stroke-width="8"
+        stroke-dasharray="263.9" stroke-dashoffset="263.9" />
+    </svg>
+  </div>
+  <div id="percent" class="percent">0%</div>
+  <div class="label">Goals Done</div>
+  <script>
+    function render() {
+      const key = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
+      const goals = JSON.parse(localStorage.getItem(key) || '[]');
+      const today = new Date().toISOString().slice(0, 10);
+      const todayGoals = goals.filter(g => {
+        if (g.repeat && g.repeat !== 'none') {
+          const dow = new Date().getDay();
+          if (g.repeat === 'daily') return true;
+          if (g.repeat === 'weekdays') return dow >= 1 && dow <= 5;
+          if (g.repeat === 'weekly') return new Date(g.date).getDay() === dow;
+          if (g.repeat === 'custom') return (g.repeatDays || []).includes(dow);
+          return false;
+        }
+        return g.date === today;
+      });
+      const completed = todayGoals.filter(g => g.completed || (g.completedDates || []).includes(today)).length;
+      const total = todayGoals.length || 1;
+      const pct = Math.round((completed / total) * 100);
+      const offset = 263.9 - (263.9 * pct / 100);
+      document.getElementById('progress').style.strokeDashoffset = offset;
+      document.getElementById('percent').textContent = pct + '%';
+    }
+    render();
+    setInterval(render, 30000);
+  </script>
+</body>
+</html>
