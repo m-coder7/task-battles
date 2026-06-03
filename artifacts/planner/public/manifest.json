@@ -1,0 +1,40 @@
+{
+  "name": "Task Battles",
+  "short_name": "Task Battles",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#FF9500",
+  "icons": [
+    { "src": "/icon.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "widgets": [
+    {
+      "name": "Today's Tasks",
+      "short_name": "Tasks",
+      "description": "Shows today's goals with checkboxes",
+      "ms_ac_template": "tasks",
+      "ms_ac_icons": [{ "src": "/icon.png", "sizes": "512x512" }],
+      "href": "/widgets/tasks-widget.html",
+      "sizing": { "width": { "min": 280, "max": 320 }, "height": { "min": 200, "max": 300 } }
+    },
+    {
+      "name": "Rivalry Score",
+      "short_name": "Rivalry",
+      "description": "Shows your score vs rival with progress bar",
+      "ms_ac_template": "rivalry",
+      "ms_ac_icons": [{ "src": "/icon.png", "sizes": "512x512" }],
+      "href": "/widgets/rivalry-widget.html",
+      "sizing": { "width": { "min": 280, "max": 320 }, "height": { "min": 150, "max": 200 } }
+    },
+    {
+      "name": "Daily Progress",
+      "short_name": "Progress",
+      "description": "Circular progress ring showing goals completed today",
+      "ms_ac_template": "progress",
+      "ms_ac_icons": [{ "src": "/icon.png", "sizes": "512x512" }],
+      "href": "/widgets/progress-widget.html",
+      "sizing": { "width": { "min": 150, "max": 200 }, "height": { "min": 150, "max": 200 } }
+    }
+  ]
+}
