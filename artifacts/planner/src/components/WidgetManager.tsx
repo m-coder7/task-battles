@@ -15,7 +15,7 @@ const WIDGETS: WidgetDef[] = [
   {
     label: "widget-tasks",
     title: "Today's Tasks",
-    url: "/widgets/tasks-widget.html",
+    url: "widgets/tasks-widget.html",
     width: 260,
     height: 320,
     icon: <LayoutGrid size={16} />,
@@ -24,7 +24,7 @@ const WIDGETS: WidgetDef[] = [
   {
     label: "widget-progress",
     title: "Daily Progress",
-    url: "/widgets/progress-widget.html",
+    url: "widgets/progress-widget.html",
     width: 220,
     height: 240,
     icon: <Monitor size={16} />,
@@ -33,7 +33,7 @@ const WIDGETS: WidgetDef[] = [
   {
     label: "widget-events",
     title: "Upcoming Events",
-    url: "/widgets/events-widget.html",
+    url: "widgets/events-widget.html",
     width: 260,
     height: 280,
     icon: <Clock size={16} />,
