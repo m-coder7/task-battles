@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -16,10 +16,24 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { EventsProvider } from "@/contexts/EventsContext";
 import { GoalsProvider } from "@/contexts/GoalsContext";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
+
+function AuthGuard() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/auth");
+    }
+  }, [loading, user, router]);
+
+  return null;
+}
 
 function RootLayoutNav() {
   return (
@@ -31,6 +45,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="goal-form"
+        options={{ presentation: "modal", headerShown: false }}
+      />
+      <Stack.Screen
+        name="auth"
         options={{ presentation: "modal", headerShown: false }}
       />
     </Stack>
@@ -59,11 +77,14 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView>
             <KeyboardProvider>
-              <EventsProvider>
-                <GoalsProvider>
-                  <RootLayoutNav />
-                </GoalsProvider>
-              </EventsProvider>
+              <AuthProvider>
+                <EventsProvider>
+                  <GoalsProvider>
+                    <AuthGuard />
+                    <RootLayoutNav />
+                  </GoalsProvider>
+                </EventsProvider>
+              </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

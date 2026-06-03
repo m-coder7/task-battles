@@ -3,10 +3,8 @@ import { format, getDate, getDaysInMonth, subDays } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-
-const PROFILE_KEY = "rivalry_profile";
-const RIVAL_KEY   = "rivalry_rival_code";
 
 // ─── Offline write queue ───────────────────────────────────────────────────
 const QUEUE_KEY = "sb_offline_queue";
@@ -42,18 +40,15 @@ export interface WeekDay         { date: string; label: string; myRate: number; 
 export interface IncomingReaction { fromName: string; emoji: string }
 
 function generateInviteCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
-function generateUserId()     { return `${Date.now()}-${Math.random().toString(36).substring(2)}`; }
-
-async function loadProfile(): Promise<RivalryProfile | null> {
-  try { return JSON.parse((await AsyncStorage.getItem(PROFILE_KEY)) ?? "null"); }
-  catch { return null; }
-}
-async function loadRivalCode(): Promise<string | null> {
-  return AsyncStorage.getItem(RIVAL_KEY);
-}
 
 // ─── Hook ──────────────────────────────────────────────────────────────────
 export function useRivalry(myStats: { completed: number; total: number }) {
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  const PROFILE_KEY = userId ? `rivalry_profile_${userId}` : "rivalry_profile";
+  const RIVAL_KEY   = userId ? `rivalry_rival_code_${userId}` : "rivalry_rival_code";
+
   const [initialized, setInitialized]             = useState(false);
   const [profile, setProfile]                     = useState<RivalryProfile | null>(null);
   const [rivalCode, setRivalCodeState]             = useState<string | null>(null);
@@ -75,13 +70,19 @@ export function useRivalry(myStats: { completed: number; total: number }) {
   // ─── Load persisted state on mount ─────────────────────────────────────
   useEffect(() => {
     (async () => {
-      const [p, rc] = await Promise.all([loadProfile(), loadRivalCode()]);
+      const [p, rc] = await Promise.all([
+        (async () => {
+          try { return JSON.parse((await AsyncStorage.getItem(PROFILE_KEY)) ?? "null"); }
+          catch { return null; }
+        })(),
+        AsyncStorage.getItem(RIVAL_KEY),
+      ]);
       setProfile(p);
       setRivalCodeState(rc);
       setInitialized(true);
       flushQueue();
     })();
-  }, []);
+  }, [PROFILE_KEY, RIVAL_KEY]);
 
   // Flush queue when app comes to foreground
   useEffect(() => {
@@ -105,9 +106,12 @@ export function useRivalry(myStats: { completed: number; total: number }) {
 
   // ─── createProfile ──────────────────────────────────────────────────────
   const createProfile = useCallback(async (displayName: string) => {
+    if (!userId) {
+      setError("You must be signed in to create a rivalry profile");
+      return;
+    }
     setLoading(true); setError(null);
     try {
-      const userId = generateUserId();
       let inviteCode = generateInviteCode();
       for (;;) {
         const { data } = await supabase.from("profiles").select("invite_code").eq("invite_code", inviteCode).maybeSingle();
@@ -123,7 +127,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       const msg = e instanceof Error ? e.message : "Failed to create profile";
       setError(msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch") ? "No connection. Try again." : msg);
     } finally { setLoading(false); }
-  }, []);
+  }, [userId, PROFILE_KEY]);
 
   // ─── changeDisplayName ──────────────────────────────────────────────────
   const changeDisplayName = useCallback(async (newName: string) => {
@@ -133,7 +137,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
     setProfile(updated);
     const { error } = await supabase.from("profiles").update({ display_name: newName }).eq("invite_code", profile.inviteCode);
     if (error) enqueueWrite({ id: `profile_${profile.inviteCode}`, table: "profiles", data: { invite_code: profile.inviteCode, user_id: profile.userId, display_name: newName } });
-  }, [profile]);
+  }, [profile, PROFILE_KEY]);
 
   // ─── connectRival ────────────────────────────────────────────────────────
   const connectRival = useCallback(async (code: string) => {
@@ -157,14 +161,14 @@ export function useRivalry(myStats: { completed: number; total: number }) {
   const disconnectRival = useCallback(async () => {
     await AsyncStorage.removeItem(RIVAL_KEY);
     setRivalCodeState(null); setRivalInfo(null); setRivalDailyStats(null); setRivalMonthlyStats(null); setWeekHistory([]);
-  }, []);
+  }, [RIVAL_KEY]);
 
   const deleteProfile = useCallback(async () => {
     await AsyncStorage.multiRemove([PROFILE_KEY, RIVAL_KEY]);
     setProfile(null); setRivalCodeState(null); setRivalInfo(null);
     setRivalDailyStats(null); setRivalMonthlyStats(null); setMyDailyStats(null); setMyMonthlyStats(null);
     setWeekHistory([]); setIncomingReaction(null); setLastMonthResult(null);
-  }, []);
+  }, [PROFILE_KEY, RIVAL_KEY]);
 
   // ─── sendReaction ────────────────────────────────────────────────────────
   const sendReaction = useCallback(async (emoji: string) => {
@@ -182,15 +186,15 @@ export function useRivalry(myStats: { completed: number; total: number }) {
 
   // ─── syncMyStats ─────────────────────────────────────────────────────────
   const syncMyStats = useCallback(async (stats: { completed: number; total: number }) => {
-    if (!profile) return;
+    if (!profile || !userId) return;
     const rate    = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-    const statsId = `${profile.userId}_${today}`;
-    const dailyRow = { id: statsId, user_id: profile.userId, completed: stats.completed, total: stats.total, rate, date: today };
+    const statsId = `${userId}_${today}`;
+    const dailyRow = { id: statsId, user_id: userId, completed: stats.completed, total: stats.total, rate, date: today };
     const { error: e1 } = await supabase.from("daily_stats").upsert(dailyRow);
     if (e1) enqueueWrite({ id: `daily_${statsId}`, table: "daily_stats", data: dailyRow });
     else setMyDailyStats({ completed: stats.completed, total: stats.total, rate, date: today });
 
-    const monthId = `${profile.userId}_${yearMonth}`;
+    const monthId = `${userId}_${yearMonth}`;
     const { data: ex } = await supabase.from("monthly_stats").select("*").eq("id", monthId).maybeSingle();
     const existing = ex as Record<string, number> | null;
     const alreadyToday = existing ? existing.days_tracked >= getDate(new Date()) : false;
@@ -198,12 +202,12 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       const newDays = (existing?.days_tracked ?? 0) + 1;
       const newSum  = (existing?.sum_rate ?? 0) + rate;
       const newAvg  = Math.round(newSum / newDays);
-      const monthRow = { id: monthId, user_id: profile.userId, year_month: yearMonth, days_tracked: newDays, sum_rate: newSum, avg_rate: newAvg };
+      const monthRow = { id: monthId, user_id: userId, year_month: yearMonth, days_tracked: newDays, sum_rate: newSum, avg_rate: newAvg };
       const { error: e2 } = await supabase.from("monthly_stats").upsert(monthRow);
       if (e2) enqueueWrite({ id: `monthly_${monthId}`, table: "monthly_stats", data: monthRow });
-      else setMyMonthlyStats({ userId: profile.userId, yearMonth, daysTracked: newDays, sumRate: newSum, avgRate: newAvg });
+      else setMyMonthlyStats({ userId, yearMonth, daysTracked: newDays, sumRate: newSum, avgRate: newAvg });
     }
-  }, [profile, today, yearMonth]);
+  }, [profile, userId, today, yearMonth]);
 
   useEffect(() => {
     if (!profile) return;
@@ -251,22 +255,22 @@ export function useRivalry(myStats: { completed: number; total: number }) {
 
   // 7-day history
   useEffect(() => {
-    if (!profile || !rivalInfo) return;
+    if (!profile || !rivalInfo || !userId) return;
     const dates = Array.from({ length: 7 }, (_, i) => {
       const d = subDays(new Date(), 6 - i);
       return { date: format(d, "yyyy-MM-dd"), label: format(d, "EEE") };
     });
-    const ids = dates.flatMap(({ date }) => [`${profile.userId}_${date}`, `${rivalInfo.userId}_${date}`]);
+    const ids = dates.flatMap(({ date }) => [`${userId}_${date}`, `${rivalInfo.userId}_${date}`]);
     supabase.from("daily_stats").select("id,rate").in("id", ids)
       .then(({ data }) => {
         const map = Object.fromEntries((data ?? []).map((r: Record<string, unknown>) => [r.id as string, r.rate as number]));
         setWeekHistory(dates.map(({ date, label }) => ({
           date, label,
-          myRate:    map[`${profile.userId}_${date}`]    ?? -1,
+          myRate:    map[`${userId}_${date}`]    ?? -1,
           rivalRate: map[`${rivalInfo.userId}_${date}`] ?? -1,
         })));
       }, () => {});
-  }, [profile?.userId, rivalInfo?.userId]);
+  }, [profile?.userId, rivalInfo?.userId, userId]);
 
   useEffect(() => {
     if (!weekHistory.length) return;

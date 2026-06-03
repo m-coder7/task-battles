@@ -7,6 +7,8 @@ import React, {
   useState,
 } from "react";
 
+import { useAuth } from "@/hooks/useAuth";
+
 export type EventColor =
   | "blue"
   | "red"
@@ -35,8 +37,6 @@ export const EVENT_COLORS: { color: EventColor; hex: string }[] = [
   { color: "pink", hex: "#EC4899" },
 ];
 
-const STORAGE_KEY = "planner_events";
-
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
@@ -52,21 +52,25 @@ interface EventsContextValue {
 const EventsContext = createContext<EventsContextValue | null>(null);
 
 export function EventsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const storageKey = user ? `events_${user.id}` : "events_anon";
   const [events, setEvents] = useState<CalendarEvent[]>([]);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((val) => {
+    AsyncStorage.getItem(storageKey).then((val) => {
       if (val) {
         try {
           setEvents(JSON.parse(val));
         } catch {}
+      } else {
+        setEvents([]);
       }
     });
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-  }, [events]);
+    AsyncStorage.setItem(storageKey, JSON.stringify(events));
+  }, [events, storageKey]);
 
   const addEvent = useCallback((event: Omit<CalendarEvent, "id">) => {
     const newEvent: CalendarEvent = { ...event, id: genId() };

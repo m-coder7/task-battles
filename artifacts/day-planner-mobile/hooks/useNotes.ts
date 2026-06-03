@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useState, useCallback, useEffect } from "react";
 
-const STORAGE_KEY = "task_battles_notes";
+import { useAuth } from "@/hooks/useAuth";
 
 export interface Note {
   id: string;
@@ -13,20 +13,22 @@ export interface Note {
   updatedAt: string;
 }
 
-async function loadNotes(): Promise<Note[]> {
-  try { return JSON.parse((await AsyncStorage.getItem(STORAGE_KEY)) ?? "[]"); }
-  catch { return []; }
-}
-async function saveNotes(notes: Note[]) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
-}
-
 export function useNotes() {
+  const { user } = useAuth();
+  const storageKey = user ? `notes_${user.id}` : "notes_anon";
   const [notes, setNotes] = useState<Note[]>([]);
+
+  async function loadNotes(): Promise<Note[]> {
+    try { return JSON.parse((await AsyncStorage.getItem(storageKey)) ?? "[]"); }
+    catch { return []; }
+  }
+  async function saveNotes(notes: Note[]) {
+    await AsyncStorage.setItem(storageKey, JSON.stringify(notes));
+  }
 
   useEffect(() => {
     loadNotes().then(setNotes);
-  }, []);
+  }, [storageKey]);
 
   const persist = useCallback((updater: (prev: Note[]) => Note[]) => {
     setNotes((prev) => {
@@ -34,7 +36,7 @@ export function useNotes() {
       saveNotes(next);
       return next;
     });
-  }, []);
+  }, [storageKey]);
 
   const addNote = useCallback((data: Omit<Note, "id" | "createdAt" | "updatedAt">): string => {
     const now = new Date().toISOString();

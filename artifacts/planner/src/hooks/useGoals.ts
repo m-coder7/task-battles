@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { format, parseISO, isBefore, startOfDay, getDay } from "date-fns";
+import { useAuth, getStorageKey } from "@/hooks/useAuth";
 
 export type GoalCategory = "must-do" | "should-do" | "nice-to-have";
 export type GoalRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
@@ -19,18 +20,17 @@ export interface Goal {
   lastNotifiedDate?: string;
 }
 
-const STORAGE_KEY = "planner_goals";
 const TODAY = () => format(new Date(), "yyyy-MM-dd");
 
-function loadGoals(): Goal[] {
+function loadGoals(key: string): Goal[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
 
-function saveGoals(goals: Goal[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
+function saveGoals(key: string, goals: Goal[]) {
+  localStorage.setItem(key, JSON.stringify(goals));
 }
 
 export const CATEGORY_META: Record<GoalCategory, { label: string; color: string; bg: string; text: string; border: string }> = {
@@ -72,9 +72,12 @@ export function isActiveToday(goal: Goal): boolean {
 }
 
 export function useGoals() {
-  const [goals, setGoals] = useState<Goal[]>(loadGoals);
+  const { user } = useAuth();
+  const storageKey = getStorageKey("planner_goals", user?.id);
+  const [goals, setGoals] = useState<Goal[]>(() => loadGoals(storageKey));
 
-  useEffect(() => { saveGoals(goals); }, [goals]);
+  useEffect(() => { setGoals(loadGoals(storageKey)); }, [storageKey]);
+  useEffect(() => { saveGoals(storageKey, goals); }, [goals, storageKey]);
 
   const addGoal = useCallback((goal: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">) => {
     const newGoal: Goal = {

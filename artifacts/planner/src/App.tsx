@@ -6,7 +6,7 @@ import {
 import {
   Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon,
   Target, Swords, List, Search, Clock, ChevronRight,
-  StickyNote, BookOpen,
+  StickyNote, BookOpen, Settings, LogOut,
 } from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
@@ -23,9 +23,11 @@ import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
 import { useGoals, isActiveToday, isCompletedToday } from "@/hooks/useGoals";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useAuth } from "@/hooks/useAuth";
+import AuthScreen from "@/components/AuthScreen";
 
 type View = "today" | "month" | "week" | "day" | "agenda";
-type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary";
+type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "settings";
 
 function useTheme() {
   const [dark, setDark] = useState(() =>
@@ -43,6 +45,7 @@ function useTheme() {
 }
 
 export default function App() {
+  const { user, loading: authLoading, signOut } = useAuth();
   const [section, setSection] = useState<Section>("calendar");
   const [view, setView] = useState<View>("today");
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -55,6 +58,18 @@ export default function App() {
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
   const { dark, toggle } = useTheme();
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
 
   useNotifications(goals, markNotified);
 
@@ -174,6 +189,7 @@ export default function App() {
     { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
     { id: "notes",    label: "Notes",    icon: <StickyNote size={15} /> },
     { id: "diary",    label: "Diary",    icon: <BookOpen size={15} /> },
+    { id: "settings", label: "Settings", icon: <Settings size={15} /> },
   ];
 
   const calendarViews: { id: View; icon: React.ReactNode; label: string; shortcut: string }[] = [
@@ -417,10 +433,28 @@ export default function App() {
           </>
         )}
 
-        {section === "goals"   && <GoalsPanel />}
-        {section === "rivalry" && <RivalryPanel />}
-        {section === "notes"   && <NotesPanel />}
-        {section === "diary"   && <DiaryPanel />}
+        {section === "goals"    && <GoalsPanel />}
+        {section === "rivalry"  && <RivalryPanel />}
+        {section === "notes"    && <NotesPanel />}
+        {section === "diary"    && <DiaryPanel />}
+        {section === "settings" && (
+          <div className="flex-1 overflow-auto p-8">
+            <h2 className="text-xl font-semibold mb-6">Settings</h2>
+            <div className="max-w-md space-y-4">
+              <div className="p-4 rounded-xl border border-border bg-card">
+                <h3 className="text-sm font-medium mb-2">Account</h3>
+                <p className="text-xs text-muted-foreground mb-3">{user.email}</p>
+                <button
+                  onClick={() => signOut()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                >
+                  <LogOut size={14} />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       <EventDialog

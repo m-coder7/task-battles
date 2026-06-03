@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 import { format, subDays, getDaysInMonth, getDate } from "date-fns";
 
-const PROFILE_KEY = "rivalry_profile";
-const RIVAL_KEY   = "rivalry_rival_code";
+function getProfileKey(userId: string | null | undefined) {
+  return `rivalry_profile_${userId ?? "anon"}`;
+}
+function getRivalKey(userId: string | null | undefined) {
+  return `rivalry_rival_code_${userId ?? "anon"}`;
+}
 
 // ─── Offline write queue ───────────────────────────────────────────────────
 const QUEUE_KEY = "sb_offline_queue";
@@ -36,17 +41,18 @@ export interface WeekDay        { date: string; label: string; myRate: number; r
 export interface IncomingReaction { fromName: string; emoji: string }
 
 function generateInviteCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
-function generateUserId()     { return crypto.randomUUID(); }
-function loadProfile(): RivalryProfile | null {
-  try { return JSON.parse(localStorage.getItem(PROFILE_KEY) ?? "null"); }
+function loadProfile(userId: string | null | undefined): RivalryProfile | null {
+  try { return JSON.parse(localStorage.getItem(getProfileKey(userId)) ?? "null"); }
   catch { return null; }
 }
-function loadRivalCode() { return localStorage.getItem(RIVAL_KEY); }
+function loadRivalCode(userId: string | null | undefined) { return localStorage.getItem(getRivalKey(userId)); }
 
 // ─── Hook ──────────────────────────────────────────────────────────────────
 export function useRivalry(myStats: { completed: number; total: number }) {
-  const [profile, setProfile]                     = useState<RivalryProfile | null>(loadProfile);
-  const [rivalCode, setRivalCodeState]             = useState<string | null>(loadRivalCode);
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [profile, setProfile]                     = useState<RivalryProfile | null>(loadProfile(userId));
+  const [rivalCode, setRivalCodeState]             = useState<string | null>(loadRivalCode(userId));
   const [rivalInfo, setRivalInfo]                 = useState<RivalInfo | null>(null);
   const [myDailyStats, setMyDailyStats]           = useState<DailyStats | null>(null);
   const [rivalDailyStats, setRivalDailyStats]     = useState<DailyStats | null>(null);
@@ -62,6 +68,11 @@ export function useRivalry(myStats: { completed: number; total: number }) {
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const today     = format(new Date(), "yyyy-MM-dd");
   const yearMonth = format(new Date(), "yyyy-MM");
+
+  useEffect(() => {
+    setProfile(loadProfile(userId));
+    setRivalCodeState(loadRivalCode(userId));
+  }, [userId]);
 
   useEffect(() => {
     const up   = () => { setOnline(true);  flushQueue(); };
@@ -83,9 +94,9 @@ export function useRivalry(myStats: { completed: number; total: number }) {
   }, [weekHistory]);
 
   const createProfile = useCallback(async (displayName: string) => {
+    if (!userId) { setError("You must be signed in to create a rivalry profile."); return; }
     setLoading(true); setError(null);
     try {
-      const userId = generateUserId();
       let inviteCode = generateInviteCode();
       for (;;) {
         const { data } = await supabase.from("profiles").select("invite_code").eq("invite_code", inviteCode).maybeSingle();
@@ -95,22 +106,22 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       const { error: err } = await supabase.from("profiles").insert({ invite_code: inviteCode, user_id: userId, display_name: displayName });
       if (err) throw err;
       const p: RivalryProfile = { userId, displayName, inviteCode };
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+      localStorage.setItem(getProfileKey(userId), JSON.stringify(p));
       setProfile(p);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to create profile";
       setError(msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network") ? "No connection. Check your internet and try again." : msg);
     } finally { setLoading(false); }
-  }, []);
+  }, [userId]);
 
   const changeDisplayName = useCallback(async (newName: string) => {
-    if (!profile) return;
+    if (!profile || !userId) return;
     const updated = { ...profile, displayName: newName };
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
+    localStorage.setItem(getProfileKey(userId), JSON.stringify(updated));
     setProfile(updated);
     const { error } = await supabase.from("profiles").update({ display_name: newName }).eq("invite_code", profile.inviteCode);
     if (error) enqueueWrite({ id: `profile_${profile.inviteCode}`, table: "profiles", data: { invite_code: profile.inviteCode, user_id: profile.userId, display_name: newName } });
-  }, [profile]);
+  }, [profile, userId]);
 
   const connectRival = useCallback(async (code: string) => {
     setLoading(true); setError(null);
@@ -121,7 +132,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       if (err) throw err;
       if (!data) { setError("Invite code not found. Ask your friend to double check."); return; }
       const info: RivalInfo = { userId: (data as Record<string,string>).user_id, displayName: (data as Record<string,string>).display_name, inviteCode: (data as Record<string,string>).invite_code };
-      localStorage.setItem(RIVAL_KEY, clean);
+      if (userId) localStorage.setItem(getRivalKey(userId), clean);
       setRivalCodeState(clean); setRivalInfo(info);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to connect rival";
@@ -130,16 +141,19 @@ export function useRivalry(myStats: { completed: number; total: number }) {
   }, [profile]);
 
   const disconnectRival = useCallback(() => {
-    localStorage.removeItem(RIVAL_KEY);
+    if (userId) localStorage.removeItem(getRivalKey(userId));
     setRivalCodeState(null); setRivalInfo(null); setRivalDailyStats(null); setRivalMonthlyStats(null); setWeekHistory([]);
-  }, []);
+  }, [userId]);
 
   const deleteProfile = useCallback(() => {
-    localStorage.removeItem(PROFILE_KEY); localStorage.removeItem(RIVAL_KEY);
+    if (userId) {
+      localStorage.removeItem(getProfileKey(userId));
+      localStorage.removeItem(getRivalKey(userId));
+    }
     setProfile(null); setRivalCodeState(null); setRivalInfo(null);
     setRivalDailyStats(null); setRivalMonthlyStats(null); setMyDailyStats(null); setMyMonthlyStats(null);
     setWeekHistory([]); setIncomingReaction(null); setLastMonthResult(null);
-  }, []);
+  }, [userId]);
 
   const sendReaction = useCallback(async (emoji: string) => {
     if (!profile || !rivalCode) return;

@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-
-const STORAGE_KEY = "task_battles_notes";
+import { useAuth, getStorageKey } from "@/hooks/useAuth";
 
 export interface Note {
   id: string;
@@ -12,18 +11,21 @@ export interface Note {
   updatedAt: string;
 }
 
-function load(): Note[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); }
+function load(key: string): Note[] {
+  try { return JSON.parse(localStorage.getItem(key) ?? "[]"); }
   catch { return []; }
 }
-function save(notes: Note[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+function save(key: string, notes: Note[]) {
+  localStorage.setItem(key, JSON.stringify(notes));
 }
 
 export function useNotes() {
-  const [notes, setNotes] = useState<Note[]>(load);
+  const { user } = useAuth();
+  const storageKey = getStorageKey("task_battles_notes", user?.id);
+  const [notes, setNotes] = useState<Note[]>(() => load(storageKey));
 
-  useEffect(() => { save(notes); }, [notes]);
+  useEffect(() => { setNotes(load(storageKey)); }, [storageKey]);
+  useEffect(() => { save(storageKey, notes); }, [notes, storageKey]);
 
   const addNote = useCallback((data: Omit<Note, "id" | "createdAt" | "updatedAt">) => {
     const now = new Date().toISOString();
