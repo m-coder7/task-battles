@@ -17,12 +17,16 @@ function NativeTabLayout() {
         <Label>Today</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="calendar">
-        <Icon sf={{ default: "calendar", selected: "calendar.fill" }} />
+        <Icon sf={{ default: "calendar.circle", selected: "calendar.circle.fill" }} />
         <Label>Calendar</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="goals">
         <Icon sf={{ default: "checkmark.circle", selected: "checkmark.circle.fill" }} />
         <Label>Goals</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="notes">
+        <Icon sf={{ default: "note.text", selected: "note.text.badge.plus" }} />
+        <Label>Notes</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="rivalry">
         <Icon sf={{ default: "bolt", selected: "bolt.fill" }} />
@@ -103,6 +107,18 @@ function ClassicTabLayout() {
               <SymbolView name="checkmark.circle" tintColor={color} size={24} />
             ) : (
               <Feather name="check-circle" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="notes"
+        options={{
+          title: "Notes",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="note.text" tintColor={color} size={24} />
+            ) : (
+              <Feather name="file-text" size={22} color={color} />
             ),
         }}
       />

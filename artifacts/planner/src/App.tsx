@@ -6,6 +6,7 @@ import {
 import {
   Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon,
   Target, Swords, List, Search, Clock, ChevronRight,
+  StickyNote, BookOpen,
 } from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
@@ -15,6 +16,8 @@ import AgendaView from "@/components/AgendaView";
 import TodayPanel from "@/components/TodayPanel";
 import GoalsPanel from "@/components/GoalsPanel";
 import RivalryPanel from "@/components/RivalryPanel";
+import NotesPanel from "@/components/NotesPanel";
+import DiaryPanel from "@/components/DiaryPanel";
 import SearchModal from "@/components/SearchModal";
 import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
@@ -22,7 +25,7 @@ import { useGoals, isActiveToday, isCompletedToday } from "@/hooks/useGoals";
 import { useNotifications } from "@/hooks/useNotifications";
 
 type View = "today" | "month" | "week" | "day" | "agenda";
-type Section = "calendar" | "goals" | "rivalry";
+type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary";
 
 function useTheme() {
   const [dark, setDark] = useState(() =>
@@ -169,6 +172,8 @@ export default function App() {
     { id: "calendar", label: "Calendar", icon: <Calendar size={15} /> },
     { id: "goals",    label: "Goals",    icon: <Target size={15} />, badge: overdueGoals.length || undefined },
     { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
+    { id: "notes",    label: "Notes",    icon: <StickyNote size={15} /> },
+    { id: "diary",    label: "Diary",    icon: <BookOpen size={15} /> },
   ];
 
   const calendarViews: { id: View; icon: React.ReactNode; label: string; shortcut: string }[] = [
@@ -186,8 +191,8 @@ export default function App() {
         <div className="px-4 pt-5 pb-2">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <CalendarDays size={19} className="text-primary" />
-              <span className="text-base font-semibold text-foreground">Day Planner</span>
+              <img src="/icon.png" alt="Task Battles" className="w-5 h-5 rounded" />
+              <span className="text-base font-semibold text-foreground">Task Battles</span>
             </div>
             <button
               onClick={() => setSearchOpen(true)}
@@ -412,8 +417,10 @@ export default function App() {
           </>
         )}
 
-        {section === "goals" && <GoalsPanel />}
+        {section === "goals"   && <GoalsPanel />}
         {section === "rivalry" && <RivalryPanel />}
+        {section === "notes"   && <NotesPanel />}
+        {section === "diary"   && <DiaryPanel />}
       </main>
 
       <EventDialog
