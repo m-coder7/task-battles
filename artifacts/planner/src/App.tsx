@@ -4,7 +4,7 @@ import {
   addWeeks, subWeeks, addDays, parseISO, isToday,
 } from "date-fns";
 import {
-  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Flame,
+  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Flame, Moon,
   Target, Swords, List, Search, Clock, ChevronRight,
   StickyNote, BookOpen, Settings, LogOut, Monitor,
 } from "lucide-react";

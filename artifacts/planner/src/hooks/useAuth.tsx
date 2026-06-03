@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 interface AuthState {
   user: User | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation?: boolean }>;
+  signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation?: boolean; autoSignedIn?: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -38,8 +38,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    return { error, needsConfirmation: !error && !data.session };
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: "taskbattles://auth/callback" },
+    });
+
+    if (error) {
+      return { error };
+    }
+
+    // If no session, either new user awaiting confirmation or existing user
+    if (!data.session && data.user) {
+      // Try to sign in to see if account already exists
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!signInError) {
+        // Account already existed and password matched — signed in automatically
+        return { error: null, needsConfirmation: false, autoSignedIn: true };
+      }
+      if (signInError.message.includes("Email not confirmed")) {
+        return { error: new Error("This email is already registered but not confirmed. Please check your inbox for the verification link."), needsConfirmation: true };
+      }
+      if (signInError.message.includes("Invalid login")) {
+        return { error: new Error("An account with this email already exists. Please sign in with your existing password."), needsConfirmation: false };
+      }
+      return { error: null, needsConfirmation: true };
+    }
+
+    return { error: null, needsConfirmation: false };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
