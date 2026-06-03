@@ -8,6 +8,8 @@ import React, {
   useState,
 } from "react";
 
+import { useAuth } from "@/hooks/useAuth";
+
 export type GoalCategory = "must-do" | "should-do" | "nice-to-have";
 export type GoalRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
 
@@ -45,7 +47,6 @@ export const REPEAT_OPTIONS: { value: GoalRepeat; label: string }[] = [
 
 export const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const STORAGE_KEY = "planner_goals";
 const TODAY = () => format(new Date(), "yyyy-MM-dd");
 
 function genId(): string {
@@ -86,21 +87,25 @@ interface GoalsContextValue {
 const GoalsContext = createContext<GoalsContextValue | null>(null);
 
 export function GoalsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const storageKey = user ? `goals_${user.id}` : "goals_anon";
   const [goals, setGoals] = useState<Goal[]>([]);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((val) => {
+    AsyncStorage.getItem(storageKey).then((val) => {
       if (val) {
         try {
           setGoals(JSON.parse(val));
         } catch {}
+      } else {
+        setGoals([]);
       }
     });
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
-  }, [goals]);
+    AsyncStorage.setItem(storageKey, JSON.stringify(goals));
+  }, [goals, storageKey]);
 
   const addGoal = useCallback(
     (

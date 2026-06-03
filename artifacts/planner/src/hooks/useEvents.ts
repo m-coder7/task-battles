@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { getDay, parseISO } from "date-fns";
+import { useAuth, getStorageKey } from "@/hooks/useAuth";
 
 export type EventColor = "blue" | "red" | "green" | "orange" | "purple" | "pink";
 export type EventRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
@@ -27,27 +28,31 @@ export interface CalendarEvent {
   repeatDays?: number[];
 }
 
-const STORAGE_KEY = "planner_events";
-
-function loadEvents(): CalendarEvent[] {
+function loadEvents(key: string): CalendarEvent[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-function saveEvents(events: CalendarEvent[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+function saveEvents(key: string, events: CalendarEvent[]) {
+  localStorage.setItem(key, JSON.stringify(events));
 }
 
 export function useEvents() {
-  const [events, setEvents] = useState<CalendarEvent[]>(loadEvents);
+  const { user } = useAuth();
+  const storageKey = getStorageKey("planner_events", user?.id);
+  const [events, setEvents] = useState<CalendarEvent[]>(() => loadEvents(storageKey));
 
   useEffect(() => {
-    saveEvents(events);
-  }, [events]);
+    setEvents(loadEvents(storageKey));
+  }, [storageKey]);
+
+  useEffect(() => {
+    saveEvents(storageKey, events);
+  }, [events, storageKey]);
 
   const addEvent = useCallback((event: Omit<CalendarEvent, "id">) => {
     const newEvent: CalendarEvent = {

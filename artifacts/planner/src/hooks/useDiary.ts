@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { format } from "date-fns";
-
-const STORAGE_KEY = "task_battles_diary";
+import { useAuth, getStorageKey } from "@/hooks/useAuth";
 
 export interface DiaryEntry {
   id: string;
@@ -24,18 +23,21 @@ export const MOODS = [
   { emoji: "🤯", label: "Overwhelmed" },
 ];
 
-function load(): Record<string, DiaryEntry> {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}"); }
+function load(key: string): Record<string, DiaryEntry> {
+  try { return JSON.parse(localStorage.getItem(key) ?? "{}"); }
   catch { return {}; }
 }
-function save(entries: Record<string, DiaryEntry>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+function save(key: string, entries: Record<string, DiaryEntry>) {
+  localStorage.setItem(key, JSON.stringify(entries));
 }
 
 export function useDiary() {
-  const [entries, setEntries] = useState<Record<string, DiaryEntry>>(load);
+  const { user } = useAuth();
+  const storageKey = getStorageKey("task_battles_diary", user?.id);
+  const [entries, setEntries] = useState<Record<string, DiaryEntry>>(() => load(storageKey));
 
-  useEffect(() => { save(entries); }, [entries]);
+  useEffect(() => { setEntries(load(storageKey)); }, [storageKey]);
+  useEffect(() => { save(storageKey, entries); }, [entries, storageKey]);
 
   const getEntry = useCallback((date: Date) => {
     return entries[format(date, "yyyy-MM-dd")] ?? null;
