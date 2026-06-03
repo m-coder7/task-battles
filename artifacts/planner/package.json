@@ -78,8 +78,11 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
     "@tauri-apps/plugin-deep-link": "^2.4.9",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "^2.4.3",
+    "@tauri-apps/plugin-window-state": "^2.4.1",
     "firebase": "^12.13.0",
     "input-otp": "^1.4.2",
     "recharts": "^2.15.4"

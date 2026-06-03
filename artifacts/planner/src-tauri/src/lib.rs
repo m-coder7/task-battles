@@ -1,22 +1,30 @@
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::WebviewWindowBuilder;
 use tauri::WebviewUrl;
 use tauri::Manager;
+use tauri::RunEvent;
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_store::StoreExt;
 use std::env;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-// Track active widget labels so the frontend can list them
+// ─── Widget tracking ───────────────────────────────────────────────────────
 struct WidgetState(Mutex<HashMap<String, WidgetMeta>>);
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct WidgetMeta {
     label: String,
     title: String,
     url: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
 }
+
+// ─── Commands ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
@@ -43,8 +51,9 @@ fn create_widget_window(
     title: String,
     width: f64,
     height: f64,
+    x: Option<f64>,
+    y: Option<f64>,
 ) -> Result<(), String> {
-    // Close existing widget with same label
     if let Some(window) = app.get_webview_window(&label) {
         let _ = window.close();
     }
@@ -55,19 +64,32 @@ fn create_widget_window(
         .max_inner_size(width, height)
         .min_inner_size(width, height)
         .decorations(false)
-        .always_on_top(true)
         .skip_taskbar(true)
         .transparent(true)
         .resizable(false)
         .visible(true)
+        .always_on_top(false)
         .build()
         .map_err(|e| e.to_string())?;
 
-    // Center on screen (or offset slightly from main window)
-    let _ = window.center();
+    if let (Some(px), Some(py)) = (x, y) {
+        let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x: px, y: py }));
+    } else {
+        let _ = window.center();
+    }
+
+    let meta = WidgetMeta {
+        label: label.clone(),
+        title,
+        url,
+        x: x.unwrap_or(0.0),
+        y: y.unwrap_or(0.0),
+        width,
+        height,
+    };
 
     let mut widgets = state.0.lock().unwrap();
-    widgets.insert(label.clone(), WidgetMeta { label, title, url });
+    widgets.insert(label, meta);
 
     Ok(())
 }
@@ -111,11 +133,69 @@ fn close_all_widgets(
     Ok(())
 }
 
+#[tauri::command]
+fn save_widget_positions(
+    app: tauri::AppHandle,
+    state: tauri::State<WidgetState>,
+) -> Result<(), String> {
+    let widgets = state.0.lock().unwrap();
+    let store = app.store("widgets.bin").map_err(|e| e.to_string())?;
+    let data: Vec<WidgetMeta> = widgets.values().cloned().collect();
+    store.set("widget_layout", serde_json::to_value(&data).unwrap_or_default());
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_widget_positions(app: tauri::AppHandle) -> Result<Vec<WidgetMeta>, String> {
+    let store = app.store("widgets.bin").map_err(|e| e.to_string())?;
+    let val = store.get("widget_layout").unwrap_or_default();
+    let data: Vec<WidgetMeta> = serde_json::from_value(val).unwrap_or_default();
+    Ok(data)
+}
+
+#[tauri::command]
+fn toggle_goal_in_widget(app: tauri::AppHandle, goal_id: String, user_id: String) -> Result<(), String> {
+    let store = app.store("widget_toggles.bin").map_err(|e| e.to_string())?;
+    let key = format!("toggle_{}", goal_id);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    store.set(&key, serde_json::json!({ "goal_id": goal_id, "user_id": user_id, "ts": now }));
+    store.save().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn poll_widget_toggles(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    let store = app.store("widget_toggles.bin").map_err(|e| e.to_string())?;
+    let mut results = Vec::new();
+    for key in store.keys() {
+        if key.starts_with("toggle_") {
+            if let Some(val) = store.get(&key) {
+                results.push(val);
+            }
+            let _ = store.delete(&key);
+        }
+    }
+    store.save().map_err(|e| e.to_string())?;
+    Ok(results)
+}
+
+// ─── Main ───────────────────────────────────────────────────────────────────
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(WidgetState(Mutex::new(HashMap::new())))
         .invoke_handler(tauri::generate_handler![
             open_external,
@@ -124,24 +204,95 @@ pub fn run() {
             close_widget_window,
             list_widget_windows,
             close_all_widgets,
-        ])
-        .setup(|app| {
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quit])?;
+            save_widget_positions,
+            load_widget_positions,
+            toggle_goal_in_widget,
+            poll_widget_toggles,
+        ]);
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "quit" => {
-                        app.exit(0);
+    builder = builder.setup(|app| {
+        let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+        let show = MenuItem::with_id(app, "show", "Show Task Battles", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+
+        let _app_handle = app.handle().clone();
+        let _tray = TrayIconBuilder::new()
+            .icon(app.default_window_icon().unwrap().clone())
+            .menu(&menu)
+            .on_menu_event(move |app, event| match event.id().as_ref() {
+                "quit" => {
+                    app.exit(0);
+                }
+                "show" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
                     }
-                    _ => {}
-                })
-                .build(app)?;
+                }
+                _ => {}
+            })
+            .on_tray_icon_event(move |tray, event| {
+                if let tauri::tray::TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, .. } = event {
+                    if let Some(window) = tray.app_handle().get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            })
+            .build(app)?;
 
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // Check if --hidden flag was passed (autostart)
+        let args: Vec<String> = env::args().collect();
+        let hidden = args.contains(&"--hidden".to_string());
+
+        if hidden {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+
+            // Restore saved widgets
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Give a moment for plugins to init
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                if let Ok(widgets) = load_widget_positions(app_handle.clone()) {
+                    for w in widgets {
+                        let _ = create_widget_window(
+                            app_handle.clone(),
+                            app_handle.state::<WidgetState>(),
+                            w.label,
+                            w.url,
+                            w.title,
+                            w.width,
+                            w.height,
+                            Some(w.x),
+                            Some(w.y),
+                        );
+                    }
+                }
+            });
+        }
+
+        Ok(())
+    });
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        match event {
+            RunEvent::WindowEvent { label, event: win_event, .. } => {
+                if label == "main" {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = win_event {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                        api.prevent_close();
+                    }
+                }
+            }
+            _ => {}
+        }
+    });
 }
