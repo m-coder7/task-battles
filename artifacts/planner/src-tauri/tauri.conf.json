@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist/public",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "PORT=5173 BASE_PATH=/ pnpm run dev",
-    "beforeBuildCommand": "PORT=5173 BASE_PATH=/ pnpm run build"
+    "beforeDevCommand": "pnpm run dev",
+    "beforeBuildCommand": "pnpm run build"
   },
   "app": {
     "windows": [
@@ -16,9 +16,7 @@
         "width": 1280,
         "height": 800,
         "minWidth": 900,
-        "minHeight": 600,
-        "titleBarStyle": "overlay",
-        "hiddenTitle": true
+        "minHeight": 600
       }
     ],
     "security": {
