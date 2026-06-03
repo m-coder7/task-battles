@@ -1,6 +1,6 @@
 # Building Task Battles Desktop App (Tauri 2)
 
-The web preview in Replit runs via the browser. To build the **native desktop app** (.exe / .dmg / .AppImage), follow these steps on your local machine.
+To build the **native desktop app** (.exe / .dmg / .AppImage), follow these steps on your local machine.
 
 ## Prerequisites
 
