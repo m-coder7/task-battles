@@ -25,6 +25,7 @@ import {
   REPEAT_OPTIONS,
   useGoals,
 } from "@/contexts/GoalsContext";
+import { useEvents } from "@/contexts/EventsContext";
 import { useColors } from "@/hooks/useColors";
 
 const CATEGORIES: GoalCategory[] = ["must-do", "should-do", "nice-to-have"];
@@ -49,7 +50,9 @@ export default function GoalFormScreen() {
   const [notificationMessage, setNotificationMessage] = useState(
     existing?.notificationMessage ?? "Time to work on your goal!"
   );
+  const [addToCalendar, setAddToCalendar] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const { addEvent } = useEvents();
 
   const today = format(new Date(), "yyyy-MM-dd");
 
@@ -58,6 +61,24 @@ export default function GoalFormScreen() {
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
   };
+
+  function formatTimeInput(val: string) {
+    const digits = val.replace(/\D/g, "").slice(0, 4);
+    if (digits.length >= 3) return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+    return digits;
+  }
+
+  const CATEGORY_EVENT_COLOR: Record<GoalCategory, import("@/contexts/EventsContext").EventColor> = {
+    "must-do": "red",
+    "should-do": "orange",
+    "nice-to-have": "blue",
+  };
+
+  function addHour(timeStr: string) {
+    const [h, m] = timeStr.split(":").map(Number);
+    const nh = (h + 1) % 24;
+    return `${String(nh).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  }
 
   const handleSave = () => {
     if (!title.trim()) {
@@ -78,6 +99,19 @@ export default function GoalFormScreen() {
       updateGoal(existing!.id, data);
     } else {
       addGoal(data);
+      if (addToCalendar) {
+        const start = data.time ?? "09:00";
+        addEvent({
+          title: data.title,
+          date: data.date,
+          startTime: start,
+          endTime: addHour(start),
+          color: CATEGORY_EVENT_COLOR[data.category],
+          description: `Goal: ${data.title}`,
+          allDay: false,
+          repeat: "none",
+        });
+      }
     }
     if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.back();
@@ -253,10 +287,26 @@ export default function GoalFormScreen() {
                 { color: colors.foreground, borderColor: colors.border, fontFamily: "Inter_400Regular" },
               ]}
               value={time}
-              onChangeText={setTime}
+              onChangeText={(t) => setTime(formatTimeInput(t))}
               placeholder="09:00"
               placeholderTextColor={colors.mutedForeground}
               keyboardType="numbers-and-punctuation"
+              maxLength={5}
+            />
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.row}>
+            <Feather name="calendar" size={18} color={colors.mutedForeground} />
+            <Text style={[styles.rowLabel, { color: colors.foreground, fontFamily: "Inter_400Regular" }]}>
+              Add to Calendar
+            </Text>
+            <Switch
+              value={addToCalendar}
+              onValueChange={setAddToCalendar}
+              trackColor={{ true: colors.primary }}
+              thumbColor="#FFFFFF"
             />
           </View>
         </View>
