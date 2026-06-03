@@ -18,6 +18,7 @@ import GoalsPanel from "@/components/GoalsPanel";
 import RivalryPanel from "@/components/RivalryPanel";
 import NotesPanel from "@/components/NotesPanel";
 import DiaryPanel from "@/components/DiaryPanel";
+import WidgetsPanel from "@/components/WidgetsPanel";
 import SearchModal from "@/components/SearchModal";
 import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
@@ -27,7 +28,7 @@ import { supabase } from "@/lib/supabase";
 import AuthScreen from "@/components/AuthScreen";
 
 type View = "today" | "month" | "week" | "day" | "agenda";
-type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "settings";
+type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "widgets" | "settings";
 
 type ThemeMode = "system" | "midnight" | "ember";
 
@@ -80,6 +81,7 @@ export default function App() {
   const [dialogInitialTime, setDialogInitialTime] = useState<string | undefined>();
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
   const { mode, setMode, themeIcon, themeLabel } = useTheme();
@@ -135,6 +137,17 @@ export default function App() {
     })();
     return () => { unsub?.(); };
   }, []);
+
+  // Close theme dropdown on click outside
+  useEffect(() => {
+    if (!themeOpen) return;
+    function onClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".relative")) setThemeOpen(false);
+    }
+    window.addEventListener("click", onClick);
+    return () => window.removeEventListener("click", onClick);
+  }, [themeOpen]);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
@@ -251,6 +264,7 @@ export default function App() {
       { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
       { id: "notes",    label: "Notes",    icon: <StickyNote size={15} /> },
       { id: "diary",    label: "Diary",    icon: <BookOpen size={15} /> },
+      { id: "widgets",  label: "Widgets",  icon: <LayoutGrid size={15} /> },
       { id: "settings", label: "Settings", icon: <Settings size={15} /> },
     ];
     return items;
@@ -381,27 +395,30 @@ export default function App() {
         )}
 
         <div className="mt-auto px-3 pb-4 space-y-1">
-          <div className="relative group">
+          <div className="relative">
             <button
+              onClick={() => setThemeOpen((v) => !v)}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))] transition-colors"
             >
               {themeIcon}
               {themeLabel}
             </button>
-            <div className="absolute bottom-full left-0 right-0 mb-1 hidden group-hover:block bg-popover border border-border rounded-lg shadow-lg p-1 z-50">
-              {(["system", "midnight", "ember"] as ThemeMode[]).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                    mode === m ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
-                  }`}
-                >
-                  {m === "ember" ? <Flame size={13} /> : m === "midnight" ? <Moon size={13} /> : <Monitor size={13} />}
-                  {m === "ember" ? "Ember" : m === "midnight" ? "Midnight" : "System"}
-                </button>
-              ))}
-            </div>
+            {themeOpen && (
+              <div className="absolute bottom-full left-0 right-0 mb-1 bg-popover border border-border rounded-lg shadow-lg p-1 z-50">
+                {(["system", "midnight", "ember"] as ThemeMode[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => { setMode(m); setThemeOpen(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                      mode === m ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {m === "ember" ? <Flame size={13} /> : m === "midnight" ? <Moon size={13} /> : <Monitor size={13} />}
+                    {m === "ember" ? "Ember" : m === "midnight" ? "Midnight" : "System"}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -528,6 +545,7 @@ export default function App() {
         {section === "rivalry"  && <RivalryPanel />}
         {section === "notes"    && <NotesPanel />}
         {section === "diary"    && <DiaryPanel />}
+        {section === "widgets"  && <WidgetsPanel events={events} goals={goals} />}
         {section === "settings" && (
           <div className="flex-1 overflow-auto p-8">
             <h2 className="text-xl font-semibold mb-6">Settings</h2>
