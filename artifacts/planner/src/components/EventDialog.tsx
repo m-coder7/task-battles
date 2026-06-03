@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { X, Trash2 } from "lucide-react";
-import { CalendarEvent, EventColor } from "@/hooks/useEvents";
-import { format, addHours, parse } from "date-fns";
+import { X, Trash2, RefreshCw } from "lucide-react";
+import { CalendarEvent, EventColor, EventRepeat, EVENT_REPEAT_META, EVENT_DAY_LABELS } from "@/hooks/useEvents";
+import { format, parseISO } from "date-fns";
 
 interface EventDialogProps {
   open: boolean;
@@ -48,7 +48,11 @@ export default function EventDialog({
   const [color, setColor] = useState<EventColor>("blue");
   const [description, setDescription] = useState("");
   const [allDay, setAllDay] = useState(false);
+  const [repeat, setRepeat] = useState<EventRepeat>("none");
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const REPEATS: EventRepeat[] = ["none", "daily", "weekdays", "weekly", "custom"];
 
   useEffect(() => {
     if (!open) { setConfirmDelete(false); return; }
@@ -60,6 +64,8 @@ export default function EventDialog({
       setColor(editEvent.color);
       setDescription(editEvent.description ?? "");
       setAllDay(editEvent.allDay ?? false);
+      setRepeat(editEvent.repeat ?? "none");
+      setRepeatDays(editEvent.repeatDays ?? []);
     } else {
       const st = initialStartTime ?? "09:00";
       setTitle("");
@@ -69,6 +75,8 @@ export default function EventDialog({
       setColor("blue");
       setDescription("");
       setAllDay(false);
+      setRepeat("none");
+      setRepeatDays([]);
     }
     setConfirmDelete(false);
   }, [editEvent, initialDate, initialStartTime, open]);
@@ -83,7 +91,7 @@ export default function EventDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onSave({ title: title.trim(), date, startTime, endTime, color, description, allDay });
+    onSave({ title: title.trim(), date, startTime, endTime, color, description, allDay, repeat: repeat === "none" ? undefined : repeat, repeatDays: repeat === "custom" ? repeatDays : undefined });
     onClose();
   }
 
@@ -228,6 +236,45 @@ export default function EventDialog({
                   />
                 ))}
               </div>
+            </div>
+
+            {/* Repeat */}
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <RefreshCw size={11} /> Repeat
+              </label>
+              <div className="flex gap-1">
+                {REPEATS.map((r) => (
+                  <button key={r} type="button" onClick={() => setRepeat(r)}
+                    className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium border transition-all
+                      ${repeat === r ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted"}`}
+                  >
+                    {EVENT_REPEAT_META[r].label}
+                  </button>
+                ))}
+              </div>
+              {repeat === "custom" && (
+                <div className="mt-2">
+                  <div className="flex gap-1">
+                    {EVENT_DAY_LABELS.map((label, dow) => (
+                      <button key={dow} type="button"
+                        onClick={() => setRepeatDays((prev) => prev.includes(dow) ? prev.filter((d) => d !== dow) : [...prev, dow].sort())}
+                        className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold border transition-all
+                          ${repeatDays.includes(dow) ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {repeatDays.length === 0 && <p className="text-[11px] text-destructive mt-1">Select at least one day</p>}
+                </div>
+              )}
+              {repeat !== "none" && (
+                <p className="text-[11px] text-primary/70 mt-1.5">
+                  Starts {format(parseISO(date + "T00:00:00"), "MMM d")}
+                  {repeat === "weekly" && ` · every ${format(parseISO(date + "T00:00:00"), "EEEE")}`}
+                </p>
+              )}
             </div>
 
             {/* Notes */}

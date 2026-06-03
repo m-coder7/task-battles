@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Day Planner",
-    "slug": "day-planner-mobile",
+    "name": "Task Battles",
+    "slug": "task-battles",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

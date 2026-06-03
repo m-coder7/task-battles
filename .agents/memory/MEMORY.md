@@ -1,0 +1,2 @@
+- [Supabase PromiseLike pattern](supabase-promiselike.md) — use `.then(handler, () => {})` not `.then().catch()` with Supabase queries in TypeScript
+- [Mobile SF Symbols](mobile-sf-symbols.md) — not all intuitive SF symbol names are valid; `calendar.fill` invalid, use `calendar.circle.fill` instead

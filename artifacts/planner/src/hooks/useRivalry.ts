@@ -1,428 +1,297 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import {
-  doc, setDoc, getDoc, onSnapshot, serverTimestamp, Timestamp,
-  enableNetwork,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { format, subDays, parseISO, getDaysInMonth, getDate } from "date-fns";
+import { supabase } from "@/lib/supabase";
+import { format, subDays, getDaysInMonth, getDate } from "date-fns";
 
 const PROFILE_KEY = "rivalry_profile";
 const RIVAL_KEY   = "rivalry_rival_code";
 
-export interface RivalryProfile {
-  userId: string;
-  displayName: string;
-  inviteCode: string;
+// ─── Offline write queue ───────────────────────────────────────────────────
+const QUEUE_KEY = "sb_offline_queue";
+interface QueuedWrite { id: string; table: string; data: Record<string, unknown> }
+function loadQueue(): QueuedWrite[] {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) ?? "[]"); }
+  catch { return []; }
+}
+function enqueueWrite(item: QueuedWrite) {
+  const q = loadQueue().filter((i) => i.id !== item.id);
+  localStorage.setItem(QUEUE_KEY, JSON.stringify([...q, item]));
+}
+async function flushQueue() {
+  const q = loadQueue();
+  if (!q.length) return;
+  const succeeded: string[] = [];
+  for (const item of q) {
+    const { error } = await supabase.from(item.table as never).upsert(item.data as never);
+    if (!error) succeeded.push(item.id);
+  }
+  localStorage.setItem(QUEUE_KEY, JSON.stringify(loadQueue().filter((i) => !succeeded.includes(i.id))));
 }
 
-export interface DailyStats {
-  completed: number;
-  total: number;
-  rate: number;
-  date: string;
-  updatedAt?: Timestamp;
-}
+// ─── Types ─────────────────────────────────────────────────────────────────
+export interface RivalryProfile { userId: string; displayName: string; inviteCode: string }
+export interface DailyStats     { completed: number; total: number; rate: number; date: string }
+export interface MonthlyStats   { userId: string; yearMonth: string; daysTracked: number; sumRate: number; avgRate: number }
+export interface RivalInfo      { userId: string; displayName: string; inviteCode: string }
+export interface WeekDay        { date: string; label: string; myRate: number; rivalRate: number }
+export interface IncomingReaction { fromName: string; emoji: string }
 
-export interface MonthlyStats {
-  userId: string;
-  yearMonth: string;
-  daysTracked: number;
-  sumRate: number;
-  avgRate: number;
-  lastUpdated?: Timestamp;
-}
-
-export interface RivalInfo {
-  userId: string;
-  displayName: string;
-  inviteCode: string;
-}
-
-export interface WeekDay {
-  date: string;
-  label: string;
-  myRate: number;
-  rivalRate: number;
-}
-
-export interface IncomingReaction {
-  fromName: string;
-  emoji: string;
-}
-
-function generateInviteCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
-function generateUserId(): string {
-  return crypto.randomUUID();
-}
-
+function generateInviteCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
+function generateUserId()     { return crypto.randomUUID(); }
 function loadProfile(): RivalryProfile | null {
   try { return JSON.parse(localStorage.getItem(PROFILE_KEY) ?? "null"); }
   catch { return null; }
 }
+function loadRivalCode() { return localStorage.getItem(RIVAL_KEY); }
 
-function loadRivalCode(): string | null {
-  return localStorage.getItem(RIVAL_KEY);
-}
-
-async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 3, delayMs = 1000): Promise<T> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      if (i > 0) {
-        await enableNetwork(db);
-        await new Promise((r) => setTimeout(r, delayMs * i));
-      }
-      return await fn();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "";
-      const isOffline = msg.toLowerCase().includes("offline") || msg.toLowerCase().includes("network");
-      if (!isOffline || i === retries - 1) throw e;
-    }
-  }
-  throw new Error("Max retries exceeded");
-}
-
+// ─── Hook ──────────────────────────────────────────────────────────────────
 export function useRivalry(myStats: { completed: number; total: number }) {
-  const [profile, setProfile]               = useState<RivalryProfile | null>(loadProfile);
-  const [rivalCode, setRivalCodeState]       = useState<string | null>(loadRivalCode);
-  const [rivalInfo, setRivalInfo]             = useState<RivalInfo | null>(null);
-  const [myDailyStats, setMyDailyStats]       = useState<DailyStats | null>(null);
-  const [rivalDailyStats, setRivalDailyStats] = useState<DailyStats | null>(null);
-  const [myMonthlyStats, setMyMonthlyStats]   = useState<MonthlyStats | null>(null);
+  const [profile, setProfile]                     = useState<RivalryProfile | null>(loadProfile);
+  const [rivalCode, setRivalCodeState]             = useState<string | null>(loadRivalCode);
+  const [rivalInfo, setRivalInfo]                 = useState<RivalInfo | null>(null);
+  const [myDailyStats, setMyDailyStats]           = useState<DailyStats | null>(null);
+  const [rivalDailyStats, setRivalDailyStats]     = useState<DailyStats | null>(null);
+  const [myMonthlyStats, setMyMonthlyStats]       = useState<MonthlyStats | null>(null);
   const [rivalMonthlyStats, setRivalMonthlyStats] = useState<MonthlyStats | null>(null);
-  const [lastMonthResult, setLastMonthResult] = useState<{ winner: string; myAvg: number; rivalAvg: number } | null>(null);
-  const [weekHistory, setWeekHistory]         = useState<WeekDay[]>([]);
-  const [incomingReaction, setIncomingReaction] = useState<IncomingReaction | null>(null);
-  const [loading, setLoading]                 = useState(false);
-  const [error, setError]                     = useState<string | null>(null);
-  const [online, setOnline]                   = useState(true);
+  const [lastMonthResult, setLastMonthResult]     = useState<{ winner: string; myAvg: number; rivalAvg: number } | null>(null);
+  const [weekHistory, setWeekHistory]             = useState<WeekDay[]>([]);
+  const [incomingReaction, setIncomingReaction]   = useState<IncomingReaction | null>(null);
+  const [loading, setLoading]                     = useState(false);
+  const [error, setError]                         = useState<string | null>(null);
+  const [online, setOnline]                       = useState(navigator.onLine);
 
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const today     = format(new Date(), "yyyy-MM-dd");
   const yearMonth = format(new Date(), "yyyy-MM");
 
-  // ─── Online/offline detection ──────────────────────────────────────────────
   useEffect(() => {
-    const handleOnline  = () => { setOnline(true); enableNetwork(db).catch(() => {}); };
-    const handleOffline = () => setOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    setOnline(navigator.onLine);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
+    const up   = () => { setOnline(true);  flushQueue(); };
+    const down = () => setOnline(false);
+    window.addEventListener("online",  up);
+    window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
   }, []);
 
-  // ─── Streaks computed from weekHistory ────────────────────────────────────
   const myStreak = useMemo(() => {
     let s = 0;
-    for (let i = weekHistory.length - 1; i >= 0; i--) {
-      if (weekHistory[i].myRate > 0) s++; else break;
-    }
+    for (let i = weekHistory.length - 1; i >= 0; i--) { if (weekHistory[i].myRate > 0) s++; else break; }
     return s;
   }, [weekHistory]);
-
   const rivalStreak = useMemo(() => {
     let s = 0;
-    for (let i = weekHistory.length - 1; i >= 0; i--) {
-      if (weekHistory[i].rivalRate > 0) s++; else break;
-    }
+    for (let i = weekHistory.length - 1; i >= 0; i--) { if (weekHistory[i].rivalRate > 0) s++; else break; }
     return s;
   }, [weekHistory]);
 
-  // ─── createProfile ────────────────────────────────────────────────────────
   const createProfile = useCallback(async (displayName: string) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const userId = generateUserId();
       let inviteCode = generateInviteCode();
-      let exists = true;
-      while (exists) {
-        const snap = await retryWithBackoff(() => getDoc(doc(db, "profiles", inviteCode)));
-        if (!snap.exists()) exists = false;
-        else inviteCode = generateInviteCode();
+      for (;;) {
+        const { data } = await supabase.from("profiles").select("invite_code").eq("invite_code", inviteCode).maybeSingle();
+        if (!data) break;
+        inviteCode = generateInviteCode();
       }
-      const newProfile: RivalryProfile = { userId, displayName, inviteCode };
-      await retryWithBackoff(() =>
-        setDoc(doc(db, "profiles", inviteCode), {
-          userId, displayName, inviteCode, createdAt: serverTimestamp(),
-        })
-      );
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(newProfile));
-      setProfile(newProfile);
+      const { error: err } = await supabase.from("profiles").insert({ invite_code: inviteCode, user_id: userId, display_name: displayName });
+      if (err) throw err;
+      const p: RivalryProfile = { userId, displayName, inviteCode };
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+      setProfile(p);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to create profile";
-      const isOffline = msg.toLowerCase().includes("offline") || msg.toLowerCase().includes("network");
-      setError(isOffline ? "No connection to server. Check your internet and try again." : msg);
-    } finally {
-      setLoading(false);
-    }
+      setError(msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network") ? "No connection. Check your internet and try again." : msg);
+    } finally { setLoading(false); }
   }, []);
 
-  // ─── changeDisplayName ────────────────────────────────────────────────────
   const changeDisplayName = useCallback(async (newName: string) => {
     if (!profile) return;
-    try {
-      await retryWithBackoff(() =>
-        setDoc(doc(db, "profiles", profile.inviteCode), { displayName: newName }, { merge: true })
-      );
-      const updated = { ...profile, displayName: newName };
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
-      setProfile(updated);
-    } catch {
-      // silently fail — local update still applied
-      const updated = { ...profile, displayName: newName };
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
-      setProfile(updated);
-    }
+    const updated = { ...profile, displayName: newName };
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
+    setProfile(updated);
+    const { error } = await supabase.from("profiles").update({ display_name: newName }).eq("invite_code", profile.inviteCode);
+    if (error) enqueueWrite({ id: `profile_${profile.inviteCode}`, table: "profiles", data: { invite_code: profile.inviteCode, user_id: profile.userId, display_name: newName } });
   }, [profile]);
 
-  // ─── connectRival ─────────────────────────────────────────────────────────
   const connectRival = useCallback(async (code: string) => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const clean = code.trim().toUpperCase();
-      if (clean === profile?.inviteCode) {
-        setError("That's your own invite code!");
-        setLoading(false);
-        return;
-      }
-      const snap = await retryWithBackoff(() => getDoc(doc(db, "profiles", clean)));
-      if (!snap.exists()) {
-        setError("Invite code not found. Ask your friend to double check.");
-        setLoading(false);
-        return;
-      }
-      const data = snap.data() as RivalInfo;
+      if (clean === profile?.inviteCode) { setError("That's your own invite code!"); return; }
+      const { data, error: err } = await supabase.from("profiles").select("*").eq("invite_code", clean).maybeSingle();
+      if (err) throw err;
+      if (!data) { setError("Invite code not found. Ask your friend to double check."); return; }
+      const info: RivalInfo = { userId: (data as Record<string,string>).user_id, displayName: (data as Record<string,string>).display_name, inviteCode: (data as Record<string,string>).invite_code };
       localStorage.setItem(RIVAL_KEY, clean);
-      setRivalCodeState(clean);
-      setRivalInfo(data);
+      setRivalCodeState(clean); setRivalInfo(info);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to connect rival";
-      const isOffline = msg.toLowerCase().includes("offline") || msg.toLowerCase().includes("network");
-      setError(isOffline ? "No connection. Check your internet and try again." : msg);
-    } finally {
-      setLoading(false);
-    }
+      setError(msg.toLowerCase().includes("fetch") ? "No connection. Try again." : msg);
+    } finally { setLoading(false); }
   }, [profile]);
 
-  // ─── disconnectRival ──────────────────────────────────────────────────────
   const disconnectRival = useCallback(() => {
     localStorage.removeItem(RIVAL_KEY);
-    setRivalCodeState(null);
-    setRivalInfo(null);
-    setRivalDailyStats(null);
-    setRivalMonthlyStats(null);
-    setWeekHistory([]);
+    setRivalCodeState(null); setRivalInfo(null); setRivalDailyStats(null); setRivalMonthlyStats(null); setWeekHistory([]);
   }, []);
 
-  // ─── deleteProfile ────────────────────────────────────────────────────────
   const deleteProfile = useCallback(() => {
-    localStorage.removeItem(PROFILE_KEY);
-    localStorage.removeItem(RIVAL_KEY);
-    setProfile(null);
-    setRivalCodeState(null);
-    setRivalInfo(null);
-    setRivalDailyStats(null);
-    setRivalMonthlyStats(null);
-    setMyDailyStats(null);
-    setMyMonthlyStats(null);
-    setWeekHistory([]);
-    setIncomingReaction(null);
-    setLastMonthResult(null);
+    localStorage.removeItem(PROFILE_KEY); localStorage.removeItem(RIVAL_KEY);
+    setProfile(null); setRivalCodeState(null); setRivalInfo(null);
+    setRivalDailyStats(null); setRivalMonthlyStats(null); setMyDailyStats(null); setMyMonthlyStats(null);
+    setWeekHistory([]); setIncomingReaction(null); setLastMonthResult(null);
   }, []);
 
-  // ─── sendReaction ─────────────────────────────────────────────────────────
   const sendReaction = useCallback(async (emoji: string) => {
     if (!profile || !rivalCode) return;
-    try {
-      await setDoc(doc(db, "reactions", rivalCode), {
-        fromName: profile.displayName,
-        emoji,
-        sentAt: serverTimestamp(),
-        seen: false,
-      });
-    } catch {}
+    const row = { invite_code: rivalCode, from_name: profile.displayName, emoji, seen: false };
+    const { error } = await supabase.from("reactions").upsert(row);
+    if (error) enqueueWrite({ id: `reaction_${rivalCode}`, table: "reactions", data: row });
   }, [profile, rivalCode]);
 
-  // ─── clearIncomingReaction ────────────────────────────────────────────────
   const clearIncomingReaction = useCallback(async () => {
     if (!profile) return;
     setIncomingReaction(null);
-    try {
-      await setDoc(doc(db, "reactions", profile.inviteCode), { seen: true }, { merge: true });
-    } catch {}
+    await supabase.from("reactions").update({ seen: true }).eq("invite_code", profile.inviteCode);
   }, [profile]);
 
-  // ─── syncMyStats ──────────────────────────────────────────────────────────
   const syncMyStats = useCallback(async (stats: { completed: number; total: number }) => {
     if (!profile) return;
-    const rate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-    try {
-      await retryWithBackoff(() =>
-        setDoc(doc(db, "stats", `${profile.userId}_${today}`), {
-          ...stats, rate, date: today, updatedAt: serverTimestamp(),
-        }, { merge: true })
-      );
-      setMyDailyStats({ ...stats, rate, date: today });
+    const rate    = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+    const statsId = `${profile.userId}_${today}`;
+    const dailyRow = { id: statsId, user_id: profile.userId, completed: stats.completed, total: stats.total, rate, date: today };
+    const { error: e1 } = await supabase.from("daily_stats").upsert(dailyRow);
+    if (e1) enqueueWrite({ id: `daily_${statsId}`, table: "daily_stats", data: dailyRow });
+    else setMyDailyStats({ completed: stats.completed, total: stats.total, rate, date: today });
 
-      const existingSnap = await retryWithBackoff(() =>
-        getDoc(doc(db, "monthlyStats", `${profile.userId}_${yearMonth}`))
-      );
-      const existing = existingSnap.exists() ? existingSnap.data() as MonthlyStats : null;
-      const alreadyTrackedToday = existing ? existing.daysTracked >= getDate(new Date()) : false;
-
-      if (!alreadyTrackedToday) {
-        const newDaysTracked = (existing?.daysTracked ?? 0) + 1;
-        const newSumRate     = (existing?.sumRate ?? 0) + rate;
-        const newAvgRate     = Math.round(newSumRate / newDaysTracked);
-        await retryWithBackoff(() =>
-          setDoc(doc(db, "monthlyStats", `${profile.userId}_${yearMonth}`), {
-            userId: profile.userId, yearMonth,
-            daysTracked: newDaysTracked, sumRate: newSumRate, avgRate: newAvgRate,
-            lastUpdated: serverTimestamp(),
-          }, { merge: true })
-        );
-        setMyMonthlyStats({ userId: profile.userId, yearMonth, daysTracked: newDaysTracked, sumRate: newSumRate, avgRate: newAvgRate });
-      }
-    } catch {}
+    const monthId = `${profile.userId}_${yearMonth}`;
+    const { data: ex } = await supabase.from("monthly_stats").select("*").eq("id", monthId).maybeSingle();
+    const existing = ex as Record<string, number> | null;
+    const alreadyToday = existing ? existing.days_tracked >= getDate(new Date()) : false;
+    if (!alreadyToday) {
+      const newDays = (existing?.days_tracked ?? 0) + 1;
+      const newSum  = (existing?.sum_rate ?? 0) + rate;
+      const newAvg  = Math.round(newSum / newDays);
+      const monthRow = { id: monthId, user_id: profile.userId, year_month: yearMonth, days_tracked: newDays, sum_rate: newSum, avg_rate: newAvg };
+      const { error: e2 } = await supabase.from("monthly_stats").upsert(monthRow);
+      if (e2) enqueueWrite({ id: `monthly_${monthId}`, table: "monthly_stats", data: monthRow });
+      else setMyMonthlyStats({ userId: profile.userId, yearMonth, daysTracked: newDays, sumRate: newSum, avgRate: newAvg });
+    }
   }, [profile, today, yearMonth]);
 
-  // ─── Sync debounce ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!profile) return;
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(() => { syncMyStats(myStats); }, 1500);
+    syncTimer.current = setTimeout(() => syncMyStats(myStats), 1500);
     return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
   }, [myStats.completed, myStats.total, profile, syncMyStats]);
 
-  // ─── Live listeners ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!profile) return;
-    const unsub = onSnapshot(
-      doc(db, "stats", `${profile.userId}_${today}`),
-      (snap) => { if (snap.exists()) setMyDailyStats(snap.data() as DailyStats); },
-      () => {}
-    );
-    return unsub;
-  }, [profile, today]);
-
-  useEffect(() => {
-    if (!profile) return;
-    const unsub = onSnapshot(
-      doc(db, "monthlyStats", `${profile.userId}_${yearMonth}`),
-      (snap) => { if (snap.exists()) setMyMonthlyStats(snap.data() as MonthlyStats); },
-      () => {}
-    );
-    return unsub;
-  }, [profile, yearMonth]);
-
   useEffect(() => {
     if (!rivalCode) return;
-    retryWithBackoff(() => getDoc(doc(db, "profiles", rivalCode)))
-      .then((snap) => { if (snap.exists()) setRivalInfo(snap.data() as RivalInfo); })
-      .catch(() => {});
+    supabase.from("profiles").select("*").eq("invite_code", rivalCode).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const d = data as Record<string, string>;
+          setRivalInfo({ userId: d.user_id, displayName: d.display_name, inviteCode: d.invite_code });
+        }
+      }, () => {});
   }, [rivalCode]);
 
-  useEffect(() => {
-    if (!rivalInfo) return;
-    const unsub = onSnapshot(
-      doc(db, "stats", `${rivalInfo.userId}_${today}`),
-      (snap) => {
-        setRivalDailyStats(snap.exists() ? snap.data() as DailyStats : null);
-      },
-      () => {}
-    );
-    return unsub;
-  }, [rivalInfo, today]);
-
-  useEffect(() => {
-    if (!rivalInfo) return;
-    const unsub = onSnapshot(
-      doc(db, "monthlyStats", `${rivalInfo.userId}_${yearMonth}`),
-      (snap) => { if (snap.exists()) setRivalMonthlyStats(snap.data() as MonthlyStats); },
-      () => {}
-    );
-    return unsub;
-  }, [rivalInfo, yearMonth]);
-
-  // ─── Incoming reactions listener ──────────────────────────────────────────
+  // Realtime: my daily stats
   useEffect(() => {
     if (!profile) return;
-    const unsub = onSnapshot(
-      doc(db, "reactions", profile.inviteCode),
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          if (!data.seen) setIncomingReaction({ fromName: data.fromName, emoji: data.emoji });
+    const id = `${profile.userId}_${today}`;
+    const ch = supabase.channel(`daily_me_${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_stats", filter: `id=eq.${id}` },
+        (p) => { const r = p.new as Record<string,number>; setMyDailyStats({ completed: r.completed, total: r.total, rate: r.rate, date: today }); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [profile?.userId, today]);
+
+  // Realtime: rival daily stats
+  useEffect(() => {
+    if (!rivalInfo) return;
+    const id = `${rivalInfo.userId}_${today}`;
+    const ch = supabase.channel(`daily_rival_${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "daily_stats", filter: `id=eq.${id}` },
+        (p) => { const r = p.new as Record<string,number>; setRivalDailyStats({ completed: r.completed, total: r.total, rate: r.rate, date: today }); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [rivalInfo?.userId, today]);
+
+  // Realtime: my monthly stats
+  useEffect(() => {
+    if (!profile) return;
+    const id = `${profile.userId}_${yearMonth}`;
+    const ch = supabase.channel(`monthly_me_${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "monthly_stats", filter: `id=eq.${id}` },
+        (p) => { const r = p.new as Record<string,unknown>; setMyMonthlyStats({ userId: r.user_id as string, yearMonth: r.year_month as string, daysTracked: r.days_tracked as number, sumRate: r.sum_rate as number, avgRate: r.avg_rate as number }); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [profile?.userId, yearMonth]);
+
+  // Realtime: rival monthly stats
+  useEffect(() => {
+    if (!rivalInfo) return;
+    const id = `${rivalInfo.userId}_${yearMonth}`;
+    const ch = supabase.channel(`monthly_rival_${id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "monthly_stats", filter: `id=eq.${id}` },
+        (p) => { const r = p.new as Record<string,unknown>; setRivalMonthlyStats({ userId: r.user_id as string, yearMonth: r.year_month as string, daysTracked: r.days_tracked as number, sumRate: r.sum_rate as number, avgRate: r.avg_rate as number }); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [rivalInfo?.userId, yearMonth]);
+
+  // Realtime: incoming reactions
+  useEffect(() => {
+    if (!profile) return;
+    const ch = supabase.channel(`reactions_${profile.inviteCode}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reactions", filter: `invite_code=eq.${profile.inviteCode}` },
+        (p) => {
+          const r = p.new as Record<string,unknown>;
+          if (!r.seen) setIncomingReaction({ fromName: r.from_name as string, emoji: r.emoji as string });
           else setIncomingReaction(null);
-        }
-      },
-      () => {}
-    );
-    return unsub;
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [profile?.inviteCode]);
 
-  // ─── 7-day history fetch ──────────────────────────────────────────────────
+  // 7-day history
   useEffect(() => {
     if (!profile || !rivalInfo) return;
     const dates = Array.from({ length: 7 }, (_, i) => {
       const d = subDays(new Date(), 6 - i);
       return { date: format(d, "yyyy-MM-dd"), label: format(d, "EEE") };
     });
-
-    Promise.all(
-      dates.map(async ({ date, label }) => {
-        const [mySnap, rivalSnap] = await Promise.all([
-          getDoc(doc(db, "stats", `${profile.userId}_${date}`)).catch(() => null),
-          getDoc(doc(db, "stats", `${rivalInfo.userId}_${date}`)).catch(() => null),
-        ]);
-        return {
-          date,
-          label,
-          myRate:    mySnap?.exists()    ? (mySnap.data() as DailyStats).rate    : -1,
-          rivalRate: rivalSnap?.exists() ? (rivalSnap.data() as DailyStats).rate : -1,
-        };
-      })
-    ).then(setWeekHistory).catch(() => {});
+    const ids = dates.flatMap(({ date }) => [`${profile.userId}_${date}`, `${rivalInfo.userId}_${date}`]);
+    supabase.from("daily_stats").select("id,rate").in("id", ids)
+      .then(({ data }) => {
+        const map = Object.fromEntries((data ?? []).map((r: Record<string,unknown>) => [r.id as string, r.rate as number]));
+        setWeekHistory(dates.map(({ date, label }) => ({
+          date, label,
+          myRate:    map[`${profile.userId}_${date}`]    ?? -1,
+          rivalRate: map[`${rivalInfo.userId}_${date}`] ?? -1,
+        })));
+      }, () => {});
   }, [profile?.userId, rivalInfo?.userId]);
 
-  // Keep today's bar in sync with live stats
   useEffect(() => {
-    if (weekHistory.length === 0) return;
+    if (!weekHistory.length) return;
     setWeekHistory((prev) => prev.map((d) => {
       if (d.date !== today) return d;
-      const myRate = myDailyStats ? myDailyStats.rate
-        : (myStats.total > 0 ? Math.round((myStats.completed / myStats.total) * 100) : -1);
-      return { ...d, myRate, rivalRate: rivalDailyStats ? rivalDailyStats.rate : d.rivalRate };
+      const myRate = myDailyStats?.rate ?? (myStats.total > 0 ? Math.round((myStats.completed / myStats.total) * 100) : -1);
+      return { ...d, myRate, rivalRate: rivalDailyStats?.rate ?? d.rivalRate };
     }));
   }, [myDailyStats, rivalDailyStats, today, myStats]);
 
-  // ─── Last-month result ────────────────────────────────────────────────────
   useEffect(() => {
     if (!myMonthlyStats || !rivalMonthlyStats || !rivalInfo || !profile) return;
     const now = new Date();
-    const daysInMonth = getDaysInMonth(now);
-    const dayOfMonth  = getDate(now);
-    if (dayOfMonth >= daysInMonth - 1) {
-      const myAvg    = myMonthlyStats.avgRate;
-      const rivalAvg = rivalMonthlyStats.avgRate;
-      if (myAvg !== rivalAvg) {
-        const winner = myAvg > rivalAvg ? profile.displayName : rivalInfo.displayName;
-        setLastMonthResult({ winner, myAvg, rivalAvg });
-      }
+    if (getDate(now) >= getDaysInMonth(now) - 1 && myMonthlyStats.avgRate !== rivalMonthlyStats.avgRate) {
+      const winner = myMonthlyStats.avgRate > rivalMonthlyStats.avgRate ? profile.displayName : rivalInfo.displayName;
+      setLastMonthResult({ winner, myAvg: myMonthlyStats.avgRate, rivalAvg: rivalMonthlyStats.avgRate });
     }
   }, [myMonthlyStats, rivalMonthlyStats, rivalInfo, profile]);
 
-  const retryConnection = useCallback(async () => {
-    setError(null);
-    try { await enableNetwork(db); } catch {}
-  }, []);
+  const retryConnection = useCallback(() => { setError(null); flushQueue(); }, []);
 
   return {
     profile, rivalInfo, myDailyStats, rivalDailyStats,

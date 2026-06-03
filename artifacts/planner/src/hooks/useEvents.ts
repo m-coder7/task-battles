@@ -1,6 +1,18 @@
 import { useState, useCallback, useEffect } from "react";
+import { getDay, parseISO } from "date-fns";
 
 export type EventColor = "blue" | "red" | "green" | "orange" | "purple" | "pink";
+export type EventRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
+
+export const EVENT_REPEAT_META: Record<EventRepeat, { label: string }> = {
+  none:     { label: "No repeat" },
+  daily:    { label: "Daily"     },
+  weekdays: { label: "Weekdays"  },
+  weekly:   { label: "Weekly"    },
+  custom:   { label: "Custom"    },
+};
+
+export const EVENT_DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export interface CalendarEvent {
   id: string;
@@ -11,6 +23,8 @@ export interface CalendarEvent {
   color: EventColor;
   description?: string;
   allDay?: boolean;
+  repeat?: EventRepeat;
+  repeatDays?: number[];
 }
 
 const STORAGE_KEY = "planner_events";
@@ -55,7 +69,18 @@ export function useEvents() {
   }, []);
 
   const getEventsForDate = useCallback(
-    (date: string) => events.filter((e) => e.date === date),
+    (dateStr: string) => events.filter((e) => {
+      const repeat = e.repeat ?? "none";
+      if (repeat === "none") return e.date === dateStr;
+      // Only show recurring events on/after start date
+      if (dateStr < e.date) return false;
+      const dow = getDay(parseISO(dateStr));
+      if (repeat === "daily")    return true;
+      if (repeat === "weekdays") return dow >= 1 && dow <= 5;
+      if (repeat === "weekly")   return getDay(parseISO(e.date)) === dow;
+      if (repeat === "custom")   return (e.repeatDays ?? []).includes(dow);
+      return false;
+    }),
     [events]
   );
 
