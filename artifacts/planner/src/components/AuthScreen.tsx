@@ -20,6 +20,8 @@ export default function AuthScreen() {
     const result = await fn(email, password);
     if (result.error) {
       setError(result.error.message);
+    } else if (mode === "signup" && "autoSignedIn" in result && result.autoSignedIn) {
+      setError("Account already exists — you’ve been signed in automatically.");
     } else if (mode === "signup" && "needsConfirmation" in result && result.needsConfirmation) {
       setConfirmationSent(true);
     }

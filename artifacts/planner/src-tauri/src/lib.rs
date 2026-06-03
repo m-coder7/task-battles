@@ -1,6 +1,7 @@
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri_plugin_opener::OpenerExt;
+use std::env;
 
 #[tauri::command]
 fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
@@ -9,11 +10,21 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_deep_link() -> Option<String> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 && args[1].starts_with("taskbattles://") {
+        return Some(args[1].clone());
+    }
+    None
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![open_external])
+        .plugin(tauri_plugin_deep_link::init())
+        .invoke_handler(tauri::generate_handler![open_external, get_deep_link])
         .setup(|app| {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
