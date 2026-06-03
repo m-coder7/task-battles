@@ -9,6 +9,7 @@ import {
   isCompletedToday, isActiveToday, useGoals,
 } from "@/hooks/useGoals";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useEvents } from "@/hooks/useEvents";
 import GoalDialog from "@/components/GoalDialog";
 
 const ORDER: GoalCategory[] = ["must-do", "should-do", "nice-to-have"];
@@ -169,8 +170,21 @@ function Section({ title, subtitle, goals, icon, danger, defaultOpen = true, onT
   );
 }
 
+const CATEGORY_EVENT_COLOR: Record<GoalCategory, import("@/hooks/useEvents").EventColor> = {
+  "must-do": "red",
+  "should-do": "orange",
+  "nice-to-have": "blue",
+};
+
+function addHour(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  const nh = (h + 1) % 24;
+  return `${String(nh).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 export default function GoalsPanel() {
   const { goals, addGoal, updateGoal, deleteGoal, toggleComplete, markNotified } = useGoals();
+  const { addEvent } = useEvents();
   const { permission, requestPermission, sendNotification } = useNotifications(goals, markNotified);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
@@ -181,11 +195,27 @@ export default function GoalsPanel() {
   function openNew() { setEditingGoal(null); setDialogOpen(true); }
   function openEdit(goal: Goal) { setEditingGoal(goal); setDialogOpen(true); }
 
-  function handleSave(data: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">) {
+  function handleSave(
+    data: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">,
+    addToCalendar = false,
+  ) {
     if (editingGoal) {
       updateGoal(editingGoal.id, data);
     } else {
-      addGoal(data);
+      const newGoal = addGoal(data);
+      if (addToCalendar) {
+        const start = data.time ?? "09:00";
+        addEvent({
+          title: data.title,
+          date: data.date,
+          startTime: start,
+          endTime: addHour(start),
+          color: CATEGORY_EVENT_COLOR[data.category],
+          description: `Goal: ${data.title}`,
+          allDay: false,
+          repeat: "none",
+        });
+      }
     }
   }
 

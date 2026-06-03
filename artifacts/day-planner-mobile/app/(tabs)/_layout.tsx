@@ -28,6 +28,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "note.text", selected: "note.text.badge.plus" }} />
         <Label>Notes</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="diary">
+        <Icon sf={{ default: "book", selected: "book.fill" }} />
+        <Label>Diary</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="rivalry">
         <Icon sf={{ default: "bolt", selected: "bolt.fill" }} />
         <Label>Rivalry</Label>
@@ -123,6 +127,18 @@ function ClassicTabLayout() {
               <SymbolView name="note.text" tintColor={color} size={24} />
             ) : (
               <Feather name="file-text" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="diary"
+        options={{
+          title: "Diary",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="book" tintColor={color} size={24} />
+            ) : (
+              <Feather name="book-open" size={22} color={color} />
             ),
         }}
       />

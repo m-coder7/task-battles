@@ -6,7 +6,7 @@ import { format } from "date-fns";
 interface GoalDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (goal: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">) => void;
+  onSave: (goal: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">, addToCalendar: boolean) => void;
   onDelete?: (id: string) => void;
   editGoal?: Goal | null;
   initialDate?: string;
@@ -31,6 +31,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [notificationMessage, setNotificationMessage] = useState(DEFAULT_MESSAGES["must-do"]);
   const [messageEdited, setMessageEdited] = useState(false);
+  const [addToCalendar, setAddToCalendar] = useState(false);
 
   useEffect(() => {
     if (editGoal) {
@@ -53,6 +54,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       setNotificationsEnabled(true);
       setNotificationMessage(DEFAULT_MESSAGES["must-do"]);
       setMessageEdited(false);
+      setAddToCalendar(false);
     }
   }, [editGoal, initialDate, open]);
 
@@ -82,7 +84,7 @@ export default function GoalDialog({ open, onClose, onSave, onDelete, editGoal, 
       repeatDays: repeat === "custom" ? repeatDays : undefined,
       notificationsEnabled,
       notificationMessage,
-    });
+    }, addToCalendar);
     onClose();
   }
 

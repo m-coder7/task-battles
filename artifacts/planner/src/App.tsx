@@ -4,9 +4,9 @@ import {
   addWeeks, subWeeks, addDays, parseISO, isToday,
 } from "date-fns";
 import {
-  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon,
+  Plus, Calendar, LayoutGrid, CalendarDays, Sun, Moon, Flame,
   Target, Swords, List, Search, Clock, ChevronRight,
-  StickyNote, BookOpen, Settings, LogOut,
+  StickyNote, BookOpen, Settings, LogOut, Monitor,
 } from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
@@ -29,19 +29,44 @@ import AuthScreen from "@/components/AuthScreen";
 type View = "today" | "month" | "week" | "day" | "agenda";
 type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "settings";
 
+type ThemeMode = "system" | "midnight" | "ember";
+
 function useTheme() {
-  const [dark, setDark] = useState(() =>
+  const [mode, setMode] = useState<ThemeMode>(() => {
+    try {
+      const stored = localStorage.getItem("task_battles_theme") as ThemeMode | null;
+      return stored ?? "system";
+    } catch { return "system"; }
+  });
+
+  const [systemDark, setSystemDark] = useState(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches
   );
-  const toggle = () => {
-    setDark((d) => {
-      const next = !d;
-      document.documentElement.classList.toggle("dark", next);
-      return next;
-    });
-  };
-  if (dark) document.documentElement.classList.add("dark");
-  return { dark, toggle };
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove("dark", "ember");
+    if (mode === "midnight") {
+      root.classList.add("dark");
+    } else if (mode === "ember") {
+      root.classList.add("ember");
+    } else if (systemDark) {
+      root.classList.add("dark");
+    }
+    try { localStorage.setItem("task_battles_theme", mode); } catch {}
+  }, [mode, systemDark]);
+
+  const themeIcon = mode === "ember" ? <Flame size={15} /> : mode === "midnight" ? <Moon size={15} /> : <Monitor size={15} />;
+  const themeLabel = mode === "ember" ? "Ember" : mode === "midnight" ? "Midnight" : "System";
+
+  return { mode, setMode, themeIcon, themeLabel };
 }
 
 export default function App() {
@@ -57,7 +82,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
-  const { dark, toggle } = useTheme();
+  const { mode, setMode, themeIcon, themeLabel } = useTheme();
 
   if (authLoading) {
     return (
@@ -305,13 +330,28 @@ export default function App() {
         )}
 
         <div className="mt-auto px-3 pb-4 space-y-1">
-          <button
-            onClick={toggle}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))] transition-colors"
-          >
-            {dark ? <Sun size={15} /> : <Moon size={15} />}
-            {dark ? "Light mode" : "Dark mode"}
-          </button>
+          <div className="relative group">
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-[hsl(var(--sidebar-accent))] transition-colors"
+            >
+              {themeIcon}
+              {themeLabel}
+            </button>
+            <div className="absolute bottom-full left-0 right-0 mb-1 hidden group-hover:block bg-popover border border-border rounded-lg shadow-lg p-1 z-50">
+              {(["system", "midnight", "ember"] as ThemeMode[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                    mode === m ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {m === "ember" ? <Flame size={13} /> : m === "midnight" ? <Moon size={13} /> : <Monitor size={13} />}
+                  {m === "ember" ? "Ember" : m === "midnight" ? "Midnight" : "System"}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </aside>
 
