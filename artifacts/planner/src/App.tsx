@@ -19,6 +19,7 @@ import RivalryPanel from "@/components/RivalryPanel";
 import NotesPanel from "@/components/NotesPanel";
 import DiaryPanel from "@/components/DiaryPanel";
 import WidgetsPanel from "@/components/WidgetsPanel";
+import WidgetManager from "@/components/WidgetManager";
 import SearchModal from "@/components/SearchModal";
 import EventDialog from "@/components/EventDialog";
 import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
@@ -550,6 +551,7 @@ export default function App() {
           <div className="flex-1 overflow-auto p-8">
             <h2 className="text-xl font-semibold mb-6">Settings</h2>
             <div className="max-w-md space-y-4">
+              <WidgetManager />
               <div className="p-4 rounded-xl border border-border bg-card">
                 <h3 className="text-sm font-medium mb-2">Account</h3>
                 <p className="text-xs text-muted-foreground mb-3">{user.email}</p>
