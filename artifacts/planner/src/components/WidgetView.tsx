@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
-// Standalone widget view rendered when URL has ?widget=xxx
 export default function WidgetView() {
-  const params = new URLSearchParams(window.location.search);
-  const widgetType = params.get("widget") || "";
+  const [widgetType, setWidgetType] = useState<string>("");
   const [data, setData] = useState<any>(null);
 
   useEffect(() => {
+    const label = getCurrentWebviewWindow().label;
+    const type = label.replace("widget-", "");
+    setWidgetType(type);
+  }, []);
+
+  useEffect(() => {
+    if (!widgetType) return;
     function load() {
       try {
         if (widgetType === "tasks") {
@@ -72,18 +78,15 @@ export default function WidgetView() {
     return () => { clearInterval(id); window.removeEventListener('storage', load); };
   }, [widgetType]);
 
-  if (!data) return <div style={{padding:20,color:'#fff'}}>Loading...</div>;
+  if (!widgetType) return <div style={{padding:20,color:'#fff',background:'#1a1a1a',width:'100%',height:'100%'}}>Loading...</div>;
+  if (!data) return <div style={{padding:20,color:'#fff',background:'#1a1a1a',width:'100%',height:'100%'}}>Loading {widgetType}...</div>;
 
   const bgStyle: React.CSSProperties = {
     width: '100%', height: '100%',
-    background: 'rgba(18,18,20,0.88)',
-    backdropFilter: 'blur(20px) saturate(1.3)',
-    WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+    background: '#1a1a1a',
     color: '#fff',
     padding: '16px',
-    borderRadius: '16px',
-    border: '1px solid rgba(255,255,255,0.06)',
-    boxShadow: '0 12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
+    borderRadius: '12px',
     overflow: 'hidden',
     fontFamily: 'system-ui, sans-serif',
     boxSizing: 'border-box',
@@ -91,47 +94,37 @@ export default function WidgetView() {
     flexDirection: 'column',
   };
 
-  const dragStyle: React.CSSProperties & { WebkitAppRegion: string } = {
-    position: 'absolute', top: 0, left: 0, right: 0, height: '28px',
-    WebkitAppRegion: 'drag',
-    cursor: 'grab', zIndex: 10,
-  };
-
   const headerStyle: React.CSSProperties = {
-    fontSize: '11px', fontWeight: 700, color: '#FF9500',
+    fontSize: '12px', fontWeight: 700, color: '#FF9500',
     textTransform: 'uppercase', letterSpacing: '0.6px',
-    marginBottom: '10px', marginTop: '4px',
-    pointerEvents: 'none', userSelect: 'none',
+    marginBottom: '10px',
   };
 
   if (data.type === 'tasks') {
     return (
       <div style={bgStyle}>
-        <div style={dragStyle} />
         <div style={headerStyle}>Today's Tasks</div>
         {!data.goals?.length ? (
-          <div style={{fontSize:12,color:'rgba(255,255,255,0.35)',textAlign:'center',padding:'16px 0'}}>No goals for today</div>
+          <div style={{fontSize:12,color:'#888',textAlign:'center',padding:'16px 0'}}>No goals for today</div>
         ) : (
-          <div style={{display:'flex',flexDirection:'column',gap:'2px',overflow:'auto'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:'4px',overflow:'auto'}}>
             {data.goals.map((g: any) => {
               const today = new Date().toISOString().slice(0, 10);
               const done = g.completed || (g.completedDates || []).includes(today);
               return (
-                <div key={g.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'5px 0',fontSize:'12.5px',borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+                <div key={g.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'4px 0',fontSize:'13px',borderBottom:'1px solid #333'}}>
                   <div style={{
-                    width:14,height:14,border:`2px solid ${done ? '#FF9500' : 'rgba(255,149,0,0.5)'}`,
+                    width:14,height:14,border:`2px solid ${done ? '#FF9500' : '#666'}`,
                     borderRadius:3,display:'flex',alignItems:'center',justifyContent:'center',
                     background: done ? '#FF9500' : 'transparent',
                   }}>
-                    {done && <div style={{width:6,height:3,borderLeft:'2px solid #121214',borderBottom:'2px solid #121214',transform:'rotate(-45deg)'}} />}
+                    {done && <div style={{width:6,height:3,borderLeft:'2px solid #1a1a1a',borderBottom:'2px solid #1a1a1a',transform:'rotate(-45deg)'}} />}
                   </div>
                   <span style={{textDecoration: done ? 'line-through' : 'none', opacity: done ? 0.4 : 1}}>{g.title}</span>
                 </div>
               );
             })}
-            <div style={{fontSize:10,color:'rgba(255,255,255,0.3)',textAlign:'center',marginTop:6}}>
-              {data.done}/{data.total} completed
-            </div>
+            <div style={{fontSize:10,color:'#666',textAlign:'center',marginTop:6}}>{data.done}/{data.total} completed</div>
           </div>
         )}
       </div>
@@ -142,10 +135,9 @@ export default function WidgetView() {
     const offset = 263.9 - (263.9 * (data.pct || 0)) / 100;
     return (
       <div style={{...bgStyle, alignItems:'center', justifyContent:'center'}}>
-        <div style={dragStyle} />
-        <div style={{position:'relative',width:90,height:90,marginTop:8}}>
+        <div style={{position:'relative',width:90,height:90}}>
           <svg viewBox="0 0 100 100" width="90" height="90" style={{transform:'rotate(-90deg)'}}>
-            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#333" strokeWidth="7" />
             <circle cx="50" cy="50" r="42" fill="none" stroke="#FF9500" strokeWidth="7" strokeLinecap="round"
               strokeDasharray="263.9" strokeDashoffset={offset} style={{transition:'stroke-dashoffset 0.5s'}} />
           </svg>
@@ -153,8 +145,8 @@ export default function WidgetView() {
             {data.pct}%
           </div>
         </div>
-        <div style={{fontSize:11,color:'rgba(255,255,255,0.5)',marginTop:10}}>Goals Done</div>
-        <div style={{fontSize:10,color:'rgba(255,255,255,0.35)',marginTop:4}}>{data.done} / {data.total}</div>
+        <div style={{fontSize:11,color:'#888',marginTop:10}}>Goals Done</div>
+        <div style={{fontSize:10,color:'#666',marginTop:4}}>{data.done} / {data.total}</div>
       </div>
     );
   }
@@ -162,18 +154,17 @@ export default function WidgetView() {
   if (data.type === 'events') {
     return (
       <div style={bgStyle}>
-        <div style={dragStyle} />
         <div style={headerStyle}>Upcoming</div>
         {!data.events?.length ? (
-          <div style={{fontSize:12,color:'rgba(255,255,255,0.35)',textAlign:'center',padding:'16px 0'}}>No upcoming events</div>
+          <div style={{fontSize:12,color:'#888',textAlign:'center',padding:'16px 0'}}>No upcoming events</div>
         ) : (
-          <div style={{display:'flex',flexDirection:'column',gap:'2px',overflow:'auto'}}>
+          <div style={{display:'flex',flexDirection:'column',gap:'4px',overflow:'auto'}}>
             {data.events.map((e: any) => (
-              <div key={e.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'5px 0',fontSize:12,borderBottom:'1px solid rgba(255,255,255,0.04)'}}>
+              <div key={e.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'4px 0',fontSize:12,borderBottom:'1px solid #333'}}>
                 <div style={{width:6,height:6,borderRadius:'50%',background:'#FF9500',flexShrink:0}} />
                 <span style={{flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.title}</span>
-                <span style={{fontSize:10,color:'rgba(255,255,255,0.35)',flexShrink:0}}>
-                  {new Date(e.date).toLocaleDateString(undefined,{month:'short',day:'numeric'})} {e.allDay?'':e.startTime}
+                <span style={{fontSize:10,color:'#888',flexShrink:0}}>
+                  {new Date(e.date + 'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})} {e.allDay?'':e.startTime}
                 </span>
               </div>
             ))}
@@ -183,5 +174,5 @@ export default function WidgetView() {
     );
   }
 
-  return <div style={{padding:20,color:'#fff'}}>Unknown widget: {widgetType}</div>;
+  return <div style={{padding:20,color:'#fff',background:'#1a1a1a',width:'100%',height:'100%'}}>Unknown widget: {widgetType}</div>;
 }

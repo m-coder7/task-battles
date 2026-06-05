@@ -525,7 +525,7 @@ importers:
         specifier: ^2.106.2
         version: 2.106.2
       '@tauri-apps/api':
-        specifier: ^2
+        specifier: ^2.11.0
         version: 2.11.0
       '@tauri-apps/plugin-autostart':
         specifier: ^2.5.1

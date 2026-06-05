@@ -58,9 +58,7 @@ fn create_widget_window(
         let _ = window.close();
     }
 
-    let widget_type = label.strip_prefix("widget-").unwrap_or(&label);
-    let app_url = format!("index.html?widget={}", widget_type);
-    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(app_url.into()))
+    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
         .title(&title)
         .inner_size(width, height)
         .max_inner_size(width, height)
