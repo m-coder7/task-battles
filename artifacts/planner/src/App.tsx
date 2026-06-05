@@ -150,6 +150,26 @@ export default function App() {
     return () => window.removeEventListener("click", onClick);
   }, [themeOpen]);
 
+  // Export data for widget app
+  useEffect(() => {
+    if (typeof window === "undefined" || !(window as any).__TAURI_INTERNALS__) return;
+    async function exportData() {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const goalsKey = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
+        const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
+        const goalsJson = localStorage.getItem(goalsKey) || '[]';
+        const eventsJson = localStorage.getItem(eventsKey) || '[]';
+        await invoke("export_data_for_widgets", { goalsJson, eventsJson });
+      } catch {
+        // ignore
+      }
+    }
+    exportData();
+    const id = setInterval(exportData, 10000);
+    return () => clearInterval(id);
+  }, [goals, events]);
+
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
     setDialogInitialDate(date ?? format(selectedDate, "yyyy-MM-dd"));
