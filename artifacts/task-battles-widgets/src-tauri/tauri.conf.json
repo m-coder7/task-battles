@@ -10,20 +10,7 @@
     "beforeBuildCommand": "pnpm run build"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Task Battles Widgets",
-        "width": 280,
-        "height": 360,
-        "minWidth": 200,
-        "minHeight": 200,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": false,
-        "skipTaskbar": true
-      }
-    ],
+    "windows": [],
     "trayIcon": {
       "id": "main-tray",
       "iconPath": "icons/icon.png",

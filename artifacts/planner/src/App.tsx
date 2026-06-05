@@ -150,7 +150,7 @@ export default function App() {
     return () => window.removeEventListener("click", onClick);
   }, [themeOpen]);
 
-  // Export data for widget app
+  // Export data + widget config for widget app
   useEffect(() => {
     if (typeof window === "undefined" || !(window as any).__TAURI_INTERNALS__) return;
     async function exportData() {
@@ -160,7 +160,8 @@ export default function App() {
         const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
         const goalsJson = localStorage.getItem(goalsKey) || '[]';
         const eventsJson = localStorage.getItem(eventsKey) || '[]';
-        await invoke("export_data_for_widgets", { goalsJson, eventsJson });
+        const configJson = localStorage.getItem('tb_widget_config') || '{"widgets":[]}';
+        await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson });
       } catch {
         // ignore
       }
