@@ -18,7 +18,6 @@ import GoalsPanel from "@/components/GoalsPanel";
 import RivalryPanel from "@/components/RivalryPanel";
 import NotesPanel from "@/components/NotesPanel";
 import DiaryPanel from "@/components/DiaryPanel";
-import WidgetsPanel from "@/components/WidgetsPanel";
 import WidgetManager from "@/components/WidgetManager";
 import SearchModal from "@/components/SearchModal";
 import EventDialog from "@/components/EventDialog";
@@ -29,7 +28,7 @@ import { supabase } from "@/lib/supabase";
 import AuthScreen from "@/components/AuthScreen";
 
 type View = "today" | "month" | "week" | "day" | "agenda";
-type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "widgets" | "settings";
+type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "settings";
 
 type ThemeMode = "system" | "midnight" | "ember";
 
@@ -286,7 +285,6 @@ export default function App() {
       { id: "rivalry",  label: "Rivalry",  icon: <Swords size={15} /> },
       { id: "notes",    label: "Notes",    icon: <StickyNote size={15} /> },
       { id: "diary",    label: "Diary",    icon: <BookOpen size={15} /> },
-      { id: "widgets",  label: "Widgets",  icon: <LayoutGrid size={15} /> },
       { id: "settings", label: "Settings", icon: <Settings size={15} /> },
     ];
     return items;
@@ -567,7 +565,6 @@ export default function App() {
         {section === "rivalry"  && <RivalryPanel />}
         {section === "notes"    && <NotesPanel />}
         {section === "diary"    && <DiaryPanel />}
-        {section === "widgets"  && <WidgetsPanel events={events} goals={goals} />}
         {section === "settings" && (
           <div className="flex-1 overflow-auto p-8">
             <h2 className="text-xl font-semibold mb-6">Settings</h2>

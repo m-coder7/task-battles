@@ -55,7 +55,7 @@ export default function ProgressWidget() {
   const pct = Math.round((done / total) * 100);
   const offset = 263.9 - (263.9 * pct) / 100;
 
-  if (loading) return <div className="p-4 text-sm text-neutral-500">Loading…</div>;
+  if (loading) return <div className="p-4 text-sm text-white/40">Loading...</div>;
 
   return (
     <div className="flex flex-col items-center justify-center h-full p-4">
@@ -65,7 +65,7 @@ export default function ProgressWidget() {
       </div>
       <div className="relative w-24 h-24">
         <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-          <circle cx="50" cy="50" r="42" fill="none" stroke="#222" strokeWidth="8" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
           <circle
             cx="50" cy="50" r="42" fill="none" stroke="#FF9500" strokeWidth="8"
             strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset={offset}
@@ -76,7 +76,7 @@ export default function ProgressWidget() {
           <span className="text-lg font-bold text-[#FF9500]">{pct}%</span>
         </div>
       </div>
-      <p className="text-xs text-neutral-500 mt-3">{done} / {total} goals done</p>
+      <p className="text-xs text-white/40 mt-3">{done} / {total} goals done</p>
     </div>
   );
 }
