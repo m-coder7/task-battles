@@ -46,6 +46,7 @@ fn get_deep_link() -> Option<String> {
 fn export_data_for_widgets(
     goals_json: String,
     events_json: String,
+    config_json: String,
 ) -> Result<(), String> {
     let local_app_data = dirs::data_local_dir()
         .ok_or("Could not find local app data directory")?;
@@ -53,9 +54,13 @@ fn export_data_for_widgets(
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join("widgets.json");
 
+    let config: serde_json::Value = serde_json::from_str(&config_json)
+        .unwrap_or(serde_json::json!({ "widgets": [] }));
+
     let data = serde_json::json!({
         "goals": serde_json::from_str::<serde_json::Value>(&goals_json).unwrap_or(serde_json::json!([])),
         "events": serde_json::from_str::<serde_json::Value>(&events_json).unwrap_or(serde_json::json!([])),
+        "config": config,
         "exported_at": chrono::Utc::now().to_rfc3339(),
     });
 
