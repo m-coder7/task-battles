@@ -43,6 +43,28 @@ fn get_deep_link() -> Option<String> {
 }
 
 #[tauri::command]
+fn export_data_for_widgets(
+    goals_json: String,
+    events_json: String,
+) -> Result<(), String> {
+    let local_app_data = dirs::data_local_dir()
+        .ok_or("Could not find local app data directory")?;
+    let dir = local_app_data.join("TaskBattles");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("widgets.json");
+
+    let data = serde_json::json!({
+        "goals": serde_json::from_str::<serde_json::Value>(&goals_json).unwrap_or(serde_json::json!([])),
+        "events": serde_json::from_str::<serde_json::Value>(&events_json).unwrap_or(serde_json::json!([])),
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    std::fs::write(&path, serde_json::to_string_pretty(&data).unwrap_or_default())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn create_widget_window(
     app: tauri::AppHandle,
     state: tauri::State<WidgetState>,
@@ -200,6 +222,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_external,
             get_deep_link,
+            export_data_for_widgets,
             create_widget_window,
             close_widget_window,
             list_widget_windows,
