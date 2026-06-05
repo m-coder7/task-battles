@@ -53,7 +53,7 @@ export default function TaskWidget() {
   const todayGoals = goals.filter(isActiveToday);
   const doneCount = todayGoals.filter(isDoneToday).length;
 
-  if (loading) return <div className="p-4 text-sm text-neutral-500">Loading…</div>;
+  if (loading) return <div className="p-4 text-sm text-white/40">Loading...</div>;
 
   return (
     <div className="p-4 h-full overflow-auto">
@@ -62,7 +62,7 @@ export default function TaskWidget() {
         <span className="text-xs font-bold text-[#FF9500] uppercase tracking-wide">Today's Tasks</span>
       </div>
       {todayGoals.length === 0 ? (
-        <p className="text-sm text-neutral-500 text-center py-8">No goals for today</p>
+        <p className="text-sm text-white/40 text-center py-8">No goals for today</p>
       ) : (
         <div className="space-y-1">
           {todayGoals.map((g) => {
@@ -72,15 +72,15 @@ export default function TaskWidget() {
                 {done ? (
                   <CheckCircle2 size={16} className="text-[#FF9500] shrink-0" />
                 ) : (
-                  <Circle size={16} className="text-neutral-600 shrink-0" />
+                  <Circle size={16} className="text-white/30 shrink-0" />
                 )}
-                <span className={`text-sm ${done ? "line-through text-neutral-500" : "text-white"}`}>
+                <span className={`text-sm ${done ? "line-through text-white/30" : "text-white"}`}>
                   {g.title}
                 </span>
               </div>
             );
           })}
-          <p className="text-[10px] text-neutral-600 text-center mt-2">
+          <p className="text-[10px] text-white/30 text-center mt-2">
             {doneCount}/{todayGoals.length} completed
           </p>
         </div>

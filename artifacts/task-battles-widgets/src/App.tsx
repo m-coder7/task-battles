@@ -22,8 +22,9 @@ export default function App() {
   const handleClose = async () => {
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const { invoke } = await import("@tauri-apps/api/core");
       const win = getCurrentWindow();
-      await win.close();
+      await invoke("close_widget", { label: win.label });
     } catch {
       // ignore
     }
@@ -32,13 +33,12 @@ export default function App() {
   // Controller window with no widget param
   if (!urlWidget) {
     return (
-      <div className="w-full h-full bg-[#111] flex items-center justify-center">
-        <span className="text-xs text-neutral-500">Task Battles Widgets</span>
-      </div>
+      <div className="w-full h-full bg-transparent" />
     );
   }
 
-  const bgClass = translucent ? "bg-[#0a0a0a]/80 backdrop-blur-md" : "bg-[#0a0a0a]";
+  const barBg = translucent ? "bg-black/20" : "bg-[#111]/90";
+  const contentBg = translucent ? "bg-black/10 backdrop-blur-xl" : "bg-[#0a0a0a]/90";
 
   return (
     <div className="w-full h-full text-white relative overflow-hidden select-none flex flex-col">
@@ -46,9 +46,9 @@ export default function App() {
       <div
         data-tauri-drag-region
         className="shrink-0 h-7 w-full flex items-center justify-between px-2 cursor-grab active:cursor-grabbing"
-        style={{ background: translucent ? "rgba(0,0,0,0.3)" : "#111", WebkitAppRegion: "drag" }}
+        style={{ background: translucent ? "rgba(0,0,0,0.15)" : "rgba(17,17,17,0.9)", WebkitAppRegion: "drag" }}
       >
-        <span className="text-[10px] text-white/60 font-medium">
+        <span className="text-[10px] text-white/70 font-medium">
           {urlWidget === "progress" && "Progress"}
           {urlWidget === "tasks" && "Tasks"}
           {urlWidget === "events" && "Events"}
@@ -63,7 +63,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div className={`${bgClass} overflow-hidden flex-1`}>
+      <div className={`${contentBg} overflow-hidden flex-1`}>
         {urlWidget === "progress" && <ProgressWidget />}
         {urlWidget === "tasks" && <TaskWidget />}
         {urlWidget === "events" && <EventsWidget />}

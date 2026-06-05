@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, X, Plus, LayoutGrid, Target, Clock, Move, GripVertical, Eye, EyeOff, Palette, Droplets, Save } from "lucide-react";
+import { Monitor, X, Plus, LayoutGrid, Target, Clock, GripVertical, Eye, EyeOff, Droplets, Save } from "lucide-react";
 
 export type WidgetType = "tasks" | "progress" | "events";
 export type WidgetTheme = "midnight" | "ember";
@@ -10,24 +10,12 @@ interface WidgetConfig {
   enabled: boolean;
   translucent: boolean;
   theme: WidgetTheme;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
 }
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
-  { id: "progress-main", type: "progress", enabled: true, translucent: true, theme: "midnight", x: 50, y: 50, width: 240, height: 260 },
-  { id: "tasks-main", type: "tasks", enabled: true, translucent: true, theme: "midnight", x: 320, y: 50, width: 280, height: 360 },
+  { id: "progress-main", type: "progress", enabled: true, translucent: true, theme: "midnight" },
+  { id: "tasks-main", type: "tasks", enabled: true, translucent: true, theme: "midnight" },
 ];
-
-function getDefaultSize(type: WidgetType): { width: number; height: number } {
-  switch (type) {
-    case "progress": return { width: 240, height: 260 };
-    case "events": return { width: 280, height: 300 };
-    default: return { width: 280, height: 360 };
-  }
-}
 
 export default function WidgetManager() {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
@@ -40,7 +28,15 @@ export default function WidgetManager() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.widgets)) {
-          setWidgets(parsed.widgets);
+          // Strip old position/size fields if they exist
+          const clean = parsed.widgets.map((w: any) => ({
+            id: w.id,
+            type: w.type,
+            enabled: w.enabled,
+            translucent: w.translucent,
+            theme: w.theme,
+          }));
+          setWidgets(clean);
           return;
         }
       } catch {}
@@ -56,17 +52,12 @@ export default function WidgetManager() {
   const addWidget = useCallback(() => {
     const types: WidgetType[] = ["tasks", "progress", "events"];
     const type = types[widgets.length % 3];
-    const size = getDefaultSize(type);
     const newWidget: WidgetConfig = {
       id: `widget-${Date.now()}`,
       type,
       enabled: true,
       translucent: true,
       theme: "midnight",
-      x: 50 + (widgets.length * 30),
-      y: 50 + (widgets.length * 30),
-      width: size.width,
-      height: size.height,
     };
     saveToStorage([...widgets, newWidget]);
   }, [widgets, saveToStorage]);
@@ -128,7 +119,7 @@ export default function WidgetManager() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Configure floating widgets. Install the <b>Task Battles Widgets</b> companion app to see them on your desktop. Changes sync automatically.
+        Configure floating widgets. Install the <b>Task Battles Widgets</b> companion app to see them on your desktop. Drag and resize widgets directly on your desktop. Changes sync automatically.
       </p>
 
       {widgets.length === 0 && (
@@ -145,7 +136,7 @@ export default function WidgetManager() {
               w.enabled ? "border-border bg-muted/50" : "border-border/50 bg-muted/20 opacity-60"
             }`}
           >
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2">
               <GripVertical size={14} className="text-muted-foreground shrink-0" />
               <div className="flex items-center gap-1.5 text-xs font-medium">
                 {typeIcon(w.type)}
@@ -179,11 +170,7 @@ export default function WidgetManager() {
                   <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Type</label>
                   <select
                     value={w.type}
-                    onChange={(e) => {
-                      const type = e.target.value as WidgetType;
-                      const size = getDefaultSize(type);
-                      updateWidget(w.id, { type, width: size.width, height: size.height });
-                    }}
+                    onChange={(e) => updateWidget(w.id, { type: e.target.value as WidgetType })}
                     className="px-2 py-1 rounded-md border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="tasks">Tasks</option>
@@ -222,49 +209,6 @@ export default function WidgetManager() {
                     />
                   </button>
                 </div>
-
-                {/* Position & Size */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium flex items-center gap-1">
-                    <Move size={10} /> Position
-                  </label>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      value={w.x}
-                      onChange={(e) => updateWidget(w.id, { x: Number(e.target.value) })}
-                      className="w-full px-2 py-1 rounded-md border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                      placeholder="X"
-                    />
-                    <input
-                      type="number"
-                      value={w.y}
-                      onChange={(e) => updateWidget(w.id, { y: Number(e.target.value) })}
-                      className="w-full px-2 py-1 rounded-md border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                      placeholder="Y"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Size</label>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      value={w.width}
-                      onChange={(e) => updateWidget(w.id, { width: Number(e.target.value) })}
-                      className="w-full px-2 py-1 rounded-md border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                      placeholder="W"
-                    />
-                    <input
-                      type="number"
-                      value={w.height}
-                      onChange={(e) => updateWidget(w.id, { height: Number(e.target.value) })}
-                      className="w-full px-2 py-1 rounded-md border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                      placeholder="H"
-                    />
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -276,9 +220,7 @@ export default function WidgetManager() {
           {widgets.filter((w) => w.enabled).length} of {widgets.length} active
         </span>
         <button
-          onClick={() => {
-            saveToStorage(DEFAULT_WIDGETS);
-          }}
+          onClick={() => saveToStorage(DEFAULT_WIDGETS)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
         >
           <Save size={12} />
