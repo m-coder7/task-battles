@@ -84,6 +84,7 @@ fn read_shared_data() -> Result<serde_json::Value, String> {
         .join("widgets.json");
     
     if !path.exists() {
+        println!("[WidgetApp] widgets.json not found at {:?}", path);
         return Ok(serde_json::json!({ "goals": [], "events": [], "config": { "widgets": [] } }));
     }
     
@@ -92,6 +93,9 @@ fn read_shared_data() -> Result<serde_json::Value, String> {
     
     let data: serde_json::Value = serde_json::from_str(&contents)
         .map_err(|e| format!("Failed to parse shared data: {}", e))?;
+    
+    println!("[WidgetApp] Read widgets.json: {} widgets", 
+        data.get("config").and_then(|c| c.get("widgets")).and_then(|w| w.as_array()).map(|a| a.len()).unwrap_or(0));
     
     Ok(data)
 }
@@ -174,6 +178,12 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     let config = data.get("config").cloned().unwrap_or(serde_json::json!({ "widgets": [] }));
     let widgets = config.get("widgets").and_then(|w| w.as_array()).cloned().unwrap_or_default();
     
+    println!("[WidgetApp] spawn_or_update_widgets: {} widgets in config", widgets.len());
+    
+    if widgets.is_empty() {
+        println!("[WidgetApp] No widgets configured, skipping spawn");
+    }
+
     // Save current positions before potentially closing windows
     save_current_positions(app, state);
     
@@ -184,12 +194,12 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         .collect();
     
     // Remove user_closed entries for widgets that are now enabled in config
-    // This allows re-enabling a previously closed widget
     let mut user_closed = state.user_closed.lock().unwrap();
     user_closed.retain(|id| !enabled_ids.contains(id));
     let positions = state.window_positions.lock().unwrap();
     
     let mut expected_labels: Vec<String> = Vec::new();
+    let mut spawned_count = 0;
     
     for (index, w) in widgets.iter().enumerate() {
         let id = w.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -204,19 +214,18 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         
         let label = format!("widget-{}", id);
         
-        // User manually closed this widget - don't respawn
         if user_closed.contains(&id) {
+            println!("[WidgetApp] Skipping {} (user closed)", label);
             continue;
         }
         
         expected_labels.push(label.clone());
         
-        // Already open? Leave it alone so user drag/resize persists
         if app.get_webview_window(&label).is_some() {
+            println!("[WidgetApp] {} already open, skipping", label);
             continue;
         }
         
-        // Use saved position if available, otherwise cascade
         let saved_pos = positions.get(&id);
         let x = saved_pos.map(|p| p.x).unwrap_or_else(|| 50.0 + (index as f64 * 30.0));
         let y = saved_pos.map(|p| p.y).unwrap_or_else(|| 50.0 + (index as f64 * 30.0));
@@ -234,7 +243,9 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         
         let url = format!("/?widget={}&theme={}&translucent={}", widget_type, theme, translucent);
         
-        let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+        println!("[WidgetApp] Creating window {} at ({}, {}) size {}x{}", label, x, y, width, height);
+        
+        match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
             .title(&id)
             .inner_size(width, height)
             .min_inner_size(180.0, 180.0)
@@ -244,12 +255,22 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
             .skip_taskbar(true)
             .visible(true)
             .resizable(true)
-            .build();
+            .build()
+        {
+            Ok(_) => {
+                println!("[WidgetApp] Successfully created {}", label);
+                spawned_count += 1;
+            }
+            Err(e) => {
+                eprintln!("[WidgetApp] FAILED to create {}: {}", label, e);
+            }
+        }
     }
     
-    // Close windows no longer in config, and clean up user_closed
+    // Close windows no longer in config
     for (label, window) in app.webview_windows() {
         if label.starts_with("widget-") && !expected_labels.contains(&label) {
+            println!("[WidgetApp] Closing {} (not in config)", label);
             let _ = window.close();
             let id = label.strip_prefix("widget-").unwrap_or(&label).to_string();
             user_closed.remove(&id);
@@ -257,11 +278,14 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     }
     
     save_user_closed(&user_closed);
+    println!("[WidgetApp] Spawn cycle complete. Spawned {} windows.", spawned_count);
     Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    println!("[WidgetApp] Starting Task Battles Widgets companion app");
+    
     tauri::Builder::default()
         .manage(WidgetState::new())
         .plugin(tauri_plugin_opener::init())
@@ -277,28 +301,41 @@ pub fn run() {
             write_action
         ])
         .setup(|app| {
+            println!("[WidgetApp] Setup phase");
+            
             // Keeper window to keep app alive in background
-            let _keeper = WebviewWindowBuilder::new(app, "keeper", WebviewUrl::App("/".into()))
+            match WebviewWindowBuilder::new(app, "keeper", WebviewUrl::App("/".into()))
                 .inner_size(1.0, 1.0)
                 .position(-10000.0, -10000.0)
                 .decorations(false)
                 .transparent(true)
                 .skip_taskbar(true)
                 .visible(false)
-                .build()?;
+                .build()
+            {
+                Ok(_) => println!("[WidgetApp] Keeper window created"),
+                Err(e) => eprintln!("[WidgetApp] Keeper window failed: {}", e),
+            }
 
             let app_handle = app.app_handle().clone();
             let state: tauri::State<WidgetState> = app.state::<WidgetState>();
             
             // Initial spawn
-            let _ = spawn_or_update_widgets(&app_handle, &state);
+            println!("[WidgetApp] Initial spawn...");
+            match spawn_or_update_widgets(&app_handle, &state) {
+                Ok(_) => println!("[WidgetApp] Initial spawn complete"),
+                Err(e) => eprintln!("[WidgetApp] Initial spawn failed: {}", e),
+            }
             
-            // Poll for config changes and save positions periodically
+            // Poll for config changes
             std::thread::spawn(move || {
                 loop {
                     std::thread::sleep(Duration::from_secs(5));
                     let state: tauri::State<WidgetState> = app_handle.state::<WidgetState>();
-                    let _ = spawn_or_update_widgets(&app_handle, &state);
+                    match spawn_or_update_widgets(&app_handle, &state) {
+                        Ok(_) => {}
+                        Err(e) => eprintln!("[WidgetApp] Poll spawn failed: {}", e),
+                    }
                 }
             });
 
