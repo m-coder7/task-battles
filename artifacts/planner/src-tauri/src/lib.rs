@@ -214,6 +214,29 @@ fn poll_widget_toggles(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, 
     Ok(results)
 }
 
+#[tauri::command]
+fn read_pending_actions() -> Result<Vec<serde_json::Value>, String> {
+    let path = dirs::data_local_dir()
+        .ok_or("Could not find local app data directory")?
+        .join("TaskBattles")
+        .join("pending-actions.json");
+
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read pending actions: {}", e))?;
+
+    let actions: Vec<serde_json::Value> = serde_json::from_str(&contents)
+        .unwrap_or_default();
+
+    // Clear the file after reading
+    std::fs::write(&path, "[]").map_err(|e| e.to_string())?;
+
+    Ok(actions)
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -228,7 +251,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(WidgetState(Mutex::new(HashMap::new())))
-        .invoke_handler(tauri::generate_handler![
+.invoke_handler(tauri::generate_handler![
             open_external,
             get_deep_link,
             export_data_for_widgets,
@@ -240,6 +263,7 @@ pub fn run() {
             load_widget_positions,
             toggle_goal_in_widget,
             poll_widget_toggles,
+            read_pending_actions
         ]);
 
     builder = builder.setup(|app| {

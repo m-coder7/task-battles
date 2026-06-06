@@ -90,12 +90,44 @@ fn open_main_app(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn write_action(action_json: String) -> Result<(), String> {
+    let path = dirs::data_local_dir()
+        .ok_or("Could not find local app data directory")?
+        .join("TaskBattles")
+        .join("pending-actions.json");
+
+    let dir = path.parent().unwrap();
+    let _ = std::fs::create_dir_all(dir);
+
+    let mut actions: Vec<serde_json::Value> = if path.exists() {
+        let contents = std::fs::read_to_string(&path).unwrap_or("[]".to_string());
+        serde_json::from_str(&contents).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let action: serde_json::Value = serde_json::from_str(&action_json)
+        .map_err(|e| format!("Invalid action JSON: {}", e))?;
+    actions.push(action);
+
+    std::fs::write(&path, serde_json::to_string(&actions).unwrap_or("[]".to_string()))
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 // ─── Widget window spawner ────────────────────────────────────────────────────
 
 fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetState>) -> Result<(), String> {
     let data = read_shared_data()?;
     let config = data.get("config").cloned().unwrap_or(serde_json::json!({ "widgets": [] }));
     let widgets = config.get("widgets").and_then(|w| w.as_array()).cloned().unwrap_or_default();
+    
+    // Ghost widget safeguard: don't spawn widgets if the main app hasn't exported data yet
+    if data.get("exported_at").is_none() {
+        return Ok(());
+    }
     
     let mut expected_labels: Vec<String> = Vec::new();
     let mut user_closed = state.user_closed.lock().unwrap();
@@ -176,7 +208,8 @@ pub fn run() {
             read_shared_data,
             close_widget,
             quit_app,
-            open_main_app
+            open_main_app,
+            write_action
         ])
         .setup(|app| {
             // Keeper window to keep app alive in background
