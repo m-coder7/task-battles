@@ -67,9 +67,9 @@ export default function ProgressWidget({ theme }: { theme: string }) {
         <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
           <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
           <circle
-            cx="50" cy="50" r="42" fill="none" stroke="#FF9500" strokeWidth="8"
+            cx="50" cy="50" r="42" fill="none" strokeWidth="8"
             strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset={offset}
-            className="transition-all duration-500"
+            className="progress-ring transition-all duration-500"
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">

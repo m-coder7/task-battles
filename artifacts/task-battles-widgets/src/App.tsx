@@ -36,10 +36,14 @@ export default function App() {
   }
 
   const themeClass = `theme-${theme}`;
-  const containerBg = translucent ? "bg-transparent" : "bg-black/60 backdrop-blur-md rounded-lg";
+  const containerBg = translucent
+    ? "bg-transparent"
+    : theme === "light"
+      ? "bg-white/80 backdrop-blur-md rounded-lg"
+      : "bg-black/60 backdrop-blur-md rounded-lg";
 
   return (
-    <div className={`w-full h-full text-white relative overflow-hidden select-none flex flex-col ${themeClass} ${containerBg}`}>
+    <div className={`w-full h-full relative overflow-hidden select-none flex flex-col ${themeClass} ${containerBg}`}>
       <div
         data-tauri-drag-region
         className="shrink-0 h-5 w-full cursor-grab active:cursor-grabbing"

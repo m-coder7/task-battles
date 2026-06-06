@@ -1,11 +1,11 @@
 import { useState, useCallback } from "react";
-import { format, parseISO, subDays, addDays, isToday } from "date-fns";
-import { ChevronLeft, ChevronRight, BookOpen, Trash2, Tag, X, Plus, Sparkles, Pencil } from "lucide-react";
-import { useDiary, MOODS, BUILTIN_TEMPLATES, type DiaryEntry, type DiaryTemplate } from "@/hooks/useDiary";
+import { format, parseISO, subDays, addDays, isToday, differenceInDays } from "date-fns";
+import { ChevronLeft, ChevronRight, BookOpen, Trash2, Tag, X, Flame } from "lucide-react";
+import { useDiary, MOODS, type DiaryEntry } from "@/hooks/useDiary";
 import { cn } from "@/lib/utils";
 
 export default function DiaryPanel() {
-  const { allEntries, getEntry, saveEntry, deleteEntry, templates, addTemplate, removeTemplate } = useDiary();
+  const { allEntries, getEntry, saveEntry, deleteEntry } = useDiary();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [view, setView] = useState<"write" | "history">("write");
 
@@ -42,14 +42,12 @@ export default function DiaryPanel() {
           key={format(selectedDate, "yyyy-MM-dd")}
           date={selectedDate}
           entry={entry}
+          allEntries={allEntries}
           onPrev={goBack}
           onNext={goForward}
           canGoForward={canGoForward}
           onSave={(data) => saveEntry(selectedDate, data)}
           onDelete={() => deleteEntry(selectedDate)}
-          templates={templates}
-          onAddTemplate={addTemplate}
-          onRemoveTemplate={removeTemplate}
         />
       ) : (
         <HistoryView entries={allEntries} onSelectDate={(d) => { setSelectedDate(new Date(d + "T12:00:00")); setView("write"); }} />
@@ -58,94 +56,104 @@ export default function DiaryPanel() {
   );
 }
 
+function computeStreaks(entries: DiaryEntry[]): { title: string; startDate: string; currentDay: number; active: boolean }[] {
+  const streaks: Map<string, { title: string; startDate: string; lastDate: string }> = new Map();
+  const entryMap = new Map(entries.map((e) => [e.date, e]));
+
+  for (const entry of entries) {
+    if (entry.streakTitle) {
+      const existing = streaks.get(entry.streakTitle);
+      if (!existing || entry.date > existing.lastDate) {
+        streaks.set(entry.streakTitle, { title: entry.streakTitle, startDate: entry.streakStartDate || entry.date, lastDate: entry.date });
+      }
+    }
+  }
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const result: { title: string; startDate: string; currentDay: number; active: boolean }[] = [];
+
+  for (const [, s] of streaks) {
+    const days = differenceInDays(parseISO(today), parseISO(s.startDate)) + 1;
+    const lastEntryDate = s.lastDate;
+    const diff = differenceInDays(parseISO(today), parseISO(lastEntryDate));
+    result.push({
+      title: s.title,
+      startDate: s.startDate,
+      currentDay: Math.max(1, days),
+      active: diff <= 1,
+    });
+  }
+
+  return result.sort((a, b) => a.title.localeCompare(b.title));
+}
+
 interface WriteViewProps {
   date: Date;
   entry: DiaryEntry | null;
+  allEntries: DiaryEntry[];
   onPrev: () => void;
   onNext: () => void;
   canGoForward: boolean;
-  onSave: (data: { content: string; mood: string; tags: string[]; templateId?: string }) => void;
+  onSave: (data: { content: string; mood: string; tags: string[]; streakTitle?: string; streakStartDate?: string }) => void;
   onDelete: () => void;
-  templates: DiaryTemplate[];
-  onAddTemplate: (t: Omit<DiaryTemplate, "id" | "isDefault">) => DiaryTemplate;
-  onRemoveTemplate: (id: string) => void;
 }
 
-function WriteView({ date, entry, onPrev, onNext, canGoForward, onSave, onDelete, templates, onAddTemplate, onRemoveTemplate }: WriteViewProps) {
+function WriteView({ date, entry, allEntries, onPrev, onNext, canGoForward, onSave, onDelete }: WriteViewProps) {
   const [content, setContent] = useState(entry?.content ?? "");
   const [mood, setMood] = useState(entry?.mood ?? "");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>(entry?.tags ?? []);
   const [dirty, setDirty] = useState(false);
-  const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
-  const [newTemplateName, setNewTemplateName] = useState("");
-  const [newTemplateIcon, setNewTemplateIcon] = useState("📝");
-  const [newTemplateSections, setNewTemplateSections] = useState("");
-  const [activeTemplateId, setActiveTemplateId] = useState(entry?.templateId ?? "");
+  const [streakTitle, setStreakTitle] = useState(entry?.streakTitle ?? "");
 
-  const sync = useCallback((c: string, m: string, t: string[], tid?: string) => {
+  const activeStreaks = computeStreaks(allEntries);
+  const matchingStreak = streakTitle ? activeStreaks.find((s) => s.title.toLowerCase() === streakTitle.toLowerCase()) : null;
+
+  const sync = useCallback((c: string, m: string, t: string[], st?: string) => {
     if (!c && !m) return;
-    onSave({ content: c, mood: m, tags: t, templateId: tid });
-  }, [onSave]);
+    onSave({
+      content: c, mood: m, tags: t,
+      streakTitle: st || undefined,
+      streakStartDate: st && matchingStreak ? matchingStreak.startDate : (st && !matchingStreak ? format(date, "yyyy-MM-dd") : undefined),
+    });
+  }, [onSave, matchingStreak, date]);
 
-  const handleContent = (val: string) => {
-    setContent(val);
-    setDirty(true);
-  };
+  const handleContent = (val: string) => { setContent(val); setDirty(true); };
 
   const handleMood = (m: string) => {
     const next = mood === m ? "" : m;
     setMood(next);
-    sync(content, next, tags, activeTemplateId || undefined);
+    sync(content, next, tags, streakTitle || undefined);
   };
 
   const addTag = () => {
     const t = tagInput.trim().toLowerCase();
     if (!t || tags.includes(t)) { setTagInput(""); return; }
     const next = [...tags, t];
-    setTags(next);
-    setTagInput("");
-    sync(content, mood, next, activeTemplateId || undefined);
+    setTags(next); setTagInput("");
+    sync(content, mood, next, streakTitle || undefined);
   };
 
   const removeTag = (t: string) => {
     const next = tags.filter((x) => x !== t);
     setTags(next);
-    sync(content, mood, next, activeTemplateId || undefined);
+    sync(content, mood, next, streakTitle || undefined);
+  };
+
+  const handleStreakChange = (val: string) => {
+    setStreakTitle(val);
+    sync(content, mood, tags, val || undefined);
   };
 
   const handleBlur = () => {
-    if (dirty) { sync(content, mood, tags, activeTemplateId || undefined); setDirty(false); }
-  };
-
-  const applyTemplate = (template: DiaryTemplate) => {
-    setActiveTemplateId(template.id);
-    const lines = template.sections.map((s, i) => `## ${s}\n\n`).join("\n");
-    const newContent = content || lines;
-    setContent(newContent);
-    setDirty(true);
-    sync(newContent, mood, tags, template.id);
-  };
-
-  const handleCreateTemplate = () => {
-    if (!newTemplateName.trim()) return;
-    const sections = newTemplateSections
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (sections.length === 0) return;
-    onAddTemplate({
-      name: newTemplateName.trim(),
-      icon: newTemplateIcon,
-      sections,
-    });
-    setNewTemplateName("");
-    setNewTemplateIcon("📝");
-    setNewTemplateSections("");
-    setShowTemplateBuilder(false);
+    if (dirty) {
+      sync(content, mood, tags, streakTitle || undefined);
+      setDirty(false);
+    }
   };
 
   const label = isToday(date) ? "Today" : format(date, "EEEE, MMMM d, yyyy");
+  const streakDay = matchingStreak ? matchingStreak.currentDay : (streakTitle ? 1 : null);
 
   return (
     <div className="flex-1 overflow-auto flex flex-col">
@@ -153,7 +161,14 @@ function WriteView({ date, entry, onPrev, onNext, canGoForward, onSave, onDelete
         <button onClick={onPrev} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
           <ChevronLeft size={15} />
         </button>
-        <span className="flex-1 text-center text-sm font-medium text-foreground">{label}</span>
+        <div className="flex-1 text-center">
+          <span className="text-sm font-medium text-foreground">{label}</span>
+          {streakDay && (
+            <span className="ml-2 text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+              Day {streakDay} of {streakTitle || "streak"}
+            </span>
+          )}
+        </div>
         <button onClick={onNext} disabled={!canGoForward} className={cn("p-1.5 rounded-lg transition-colors", canGoForward ? "text-muted-foreground hover:text-foreground hover:bg-muted" : "text-muted-foreground/30 cursor-not-allowed")}>
           <ChevronRight size={15} />
         </button>
@@ -187,79 +202,38 @@ function WriteView({ date, entry, onPrev, onNext, canGoForward, onSave, onDelete
           </div>
         </div>
 
-        <div className="mb-3">
-          <button
-            onClick={() => setShowTemplateBuilder(!showTemplateBuilder)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors mb-2"
-          >
-            <Sparkles size={13} />
-            {showTemplateBuilder ? "Hide templates" : "Use a template"}
-          </button>
-          {showTemplateBuilder && (
-            <div className="space-y-2 mb-2">
-              <div className="flex flex-wrap gap-1.5">
-                {templates.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => applyTemplate(t)}
-                    className={cn(
-                      "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors",
-                      activeTemplateId === t.id
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                    )}
-                  >
-                    <span>{t.icon}</span>
-                    <span>{t.name}</span>
-                    {!t.isDefault && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onRemoveTemplate(t.id); }}
-                        className="ml-0.5 text-muted-foreground/40 hover:text-destructive"
-                      >
-                        <X size={10} />
-                      </button>
-                    )}
-                  </button>
-                ))}
-              </div>
-              <div className="p-3 rounded-lg border border-dashed border-border">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-2">Create custom template</p>
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    className="w-8 text-center text-lg bg-transparent outline-none"
-                    value={newTemplateIcon}
-                    onChange={(e) => setNewTemplateIcon(e.target.value)}
-                    maxLength={2}
-                  />
-                  <input
-                    className="flex-1 text-sm bg-transparent border border-border rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-primary"
-                    placeholder="Template name"
-                    value={newTemplateName}
-                    onChange={(e) => setNewTemplateName(e.target.value)}
-                  />
-                </div>
-                <textarea
-                  className="w-full text-xs bg-transparent border border-border rounded-md px-2 py-1.5 outline-none focus:ring-1 focus:ring-primary resize-none"
-                  placeholder={"One section per line:\nThings I'm grateful for\nWhat I accomplished\nWhat I want to improve"}
-                  rows={3}
-                  value={newTemplateSections}
-                  onChange={(e) => setNewTemplateSections(e.target.value)}
-                />
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Flame size={13} className="text-primary" />
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Streak title</label>
+          </div>
+          <input
+            className="w-full text-sm bg-card border border-border rounded-lg px-3 py-2 text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+            placeholder="e.g. Attending college, No sugar challenge..."
+            value={streakTitle}
+            onChange={(e) => handleStreakChange(e.target.value)}
+            onBlur={handleBlur}
+          />
+          {activeStreaks.length > 0 && !streakTitle && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {activeStreaks.map((s) => (
                 <button
-                  onClick={handleCreateTemplate}
-                  disabled={!newTemplateName.trim() || !newTemplateSections.trim()}
-                  className="mt-1.5 flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 disabled:opacity-40 disabled:cursor-not-allowed"
+                  key={s.title}
+                  onClick={() => handleStreakChange(s.title)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
                 >
-                  <Plus size={12} /> Add template
+                  <Flame size={10} />
+                  {s.title} (Day {s.currentDay})
                 </button>
-              </div>
+              ))}
             </div>
           )}
         </div>
 
         <textarea
-          className="flex-1 min-h-[240px] w-full resize-none bg-card border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary/30 transition-all leading-relaxed font-serif"
-          placeholder={activeTemplateId ? "Fill in your template sections..." : `What happened ${isToday(date) ? "today" : "on this day"}? How did it go?`}
+          className="flex-1 min-h-[240px] w-full resize-none bg-[#faf8f5] dark:bg-[#1a1815] border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary/30 transition-all leading-relaxed font-serif"
+          style={{ backgroundImage: "repeating-linear-gradient(transparent, transparent 31px, rgba(0,0,0,0.03) 31px, rgba(0,0,0,0.03) 32px)" }}
+          placeholder={`What happened ${isToday(date) ? "today" : "on this day"}? How did it go?`}
           value={content}
           onChange={(e) => handleContent(e.target.value)}
           onBlur={handleBlur}
@@ -298,58 +272,72 @@ function WriteView({ date, entry, onPrev, onNext, canGoForward, onSave, onDelete
 }
 
 function HistoryView({ entries, onSelectDate }: { entries: DiaryEntry[]; onSelectDate: (date: string) => void }) {
-  if (entries.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
-        <BookOpen size={40} strokeWidth={1} />
-        <div className="text-center">
-          <p className="font-medium text-foreground">No entries yet</p>
-          <p className="text-sm mt-1">Switch to Write to create your first entry</p>
-        </div>
-      </div>
-    );
-  }
-
-  const templateMap = new Map(BUILTIN_TEMPLATES.map((t) => [t.id, t]));
+  const activeStreaks = computeStreaks(entries);
 
   return (
     <div className="flex-1 overflow-auto p-5">
-      <div className="max-w-2xl mx-auto space-y-3">
-        {entries.map((e) => {
-          const template = e.templateId ? templateMap.get(e.templateId) : null;
-          return (
-            <button
-              key={e.id}
-              onClick={() => onSelectDate(e.date)}
-              className="w-full text-left p-4 rounded-xl border border-border bg-card hover:bg-muted/40 transition-colors group"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  {e.mood && <span className="text-xl leading-none">{e.mood}</span>}
+      <div className="max-w-2xl mx-auto space-y-4">
+        {activeStreaks.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Active Streaks</p>
+            <div className="flex flex-wrap gap-2">
+              {activeStreaks.map((s) => (
+                <div key={s.title} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20">
+                  <Flame size={14} className="text-primary" />
                   <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium text-foreground">{format(parseISO(e.date + "T12:00:00"), "EEEE, MMMM d, yyyy")}</p>
-                      {template && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                          {template.icon} {template.name}
-                        </span>
-                      )}
-                    </div>
-                    {e.tags.length > 0 && (
-                      <div className="flex gap-1 mt-0.5">
-                        {e.tags.map((t) => <span key={t} className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">{t}</span>)}
-                      </div>
-                    )}
+                    <p className="text-sm font-medium text-foreground">{s.title}</p>
+                    <p className="text-[10px] text-muted-foreground">Day {s.currentDay} · Started {format(parseISO(s.startDate), "MMM d")}</p>
                   </div>
                 </div>
-                <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5 group-hover:text-foreground transition-colors" />
-              </div>
-              {e.content && (
-                <p className="text-xs text-muted-foreground mt-2 line-clamp-2 leading-relaxed">{e.content}</p>
-              )}
-            </button>
-          );
-        })}
+              ))}
+            </div>
+          </div>
+        )}
+
+        {entries.length === 0 && activeStreaks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-4 text-muted-foreground">
+            <BookOpen size={40} strokeWidth={1} />
+            <div className="text-center">
+              <p className="font-medium text-foreground">No entries yet</p>
+              <p className="text-sm mt-1">Switch to Write to create your first entry</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {entries.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => onSelectDate(e.date)}
+                className="w-full text-left p-4 rounded-xl border border-border bg-card hover:bg-muted/40 transition-colors group"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {e.mood && <span className="text-xl leading-none">{e.mood}</span>}
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-foreground">{format(parseISO(e.date + "T12:00:00"), "EEEE, MMMM d, yyyy")}</p>
+                        {e.streakTitle && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium flex items-center gap-0.5">
+                            <Flame size={8} /> {e.streakTitle}
+                          </span>
+                        )}
+                      </div>
+                      {e.tags.length > 0 && (
+                        <div className="flex gap-1 mt-0.5">
+                          {e.tags.map((t) => <span key={t} className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">{t}</span>)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-muted-foreground shrink-0 mt-0.5 group-hover:text-foreground transition-colors" />
+                </div>
+                {e.content && (
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2 leading-relaxed">{e.content}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
