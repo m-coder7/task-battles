@@ -55,17 +55,17 @@ export default function ProgressWidget() {
   const pct = Math.round((done / total) * 100);
   const offset = 263.9 - (263.9 * pct) / 100;
 
-  if (loading) return <div className="p-4 text-sm text-white/40">Loading...</div>;
+  if (loading) return <div className="text-sm text-shadow">Loading...</div>;
 
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <Target size={14} className="text-[#FF9500]" />
-        <span className="text-xs font-bold text-[#FF9500] uppercase tracking-wide">Daily Progress</span>
+    <div className="flex flex-col items-center justify-center h-full">
+      <div className="flex items-center gap-2 mb-3">
+        <Target size={13} className="text-[#FF9500] drop-shadow" />
+        <span className="text-[11px] font-bold text-[#FF9500] uppercase tracking-wide text-shadow">Daily Progress</span>
       </div>
       <div className="relative w-24 h-24">
         <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="8" />
           <circle
             cx="50" cy="50" r="42" fill="none" stroke="#FF9500" strokeWidth="8"
             strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset={offset}
@@ -73,10 +73,10 @@ export default function ProgressWidget() {
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-lg font-bold text-[#FF9500]">{pct}%</span>
+          <span className="text-lg font-bold text-[#FF9500] text-shadow">{pct}%</span>
         </div>
       </div>
-      <p className="text-xs text-white/40 mt-3">{done} / {total} goals done</p>
+      <p className="text-xs text-white/60 text-shadow mt-2">{done} / {total} goals done</p>
     </div>
   );
 }

@@ -53,34 +53,34 @@ export default function TaskWidget() {
   const todayGoals = goals.filter(isActiveToday);
   const doneCount = todayGoals.filter(isDoneToday).length;
 
-  if (loading) return <div className="p-4 text-sm text-white/40">Loading...</div>;
+  if (loading) return <div className="text-sm text-shadow">Loading...</div>;
 
   return (
-    <div className="p-4 h-full overflow-auto">
-      <div className="flex items-center gap-2 mb-3">
-        <LayoutGrid size={14} className="text-[#FF9500]" />
-        <span className="text-xs font-bold text-[#FF9500] uppercase tracking-wide">Today's Tasks</span>
+    <div className="h-full overflow-auto">
+      <div className="flex items-center gap-2 mb-2">
+        <LayoutGrid size={13} className="text-[#FF9500] drop-shadow" />
+        <span className="text-[11px] font-bold text-[#FF9500] uppercase tracking-wide text-shadow">Today's Tasks</span>
       </div>
       {todayGoals.length === 0 ? (
-        <p className="text-sm text-white/40 text-center py-8">No goals for today</p>
+        <p className="text-sm text-shadow text-center py-6">No goals for today</p>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {todayGoals.map((g) => {
             const done = isDoneToday(g);
             return (
-              <div key={g.id} className="flex items-center gap-2 py-2">
+              <div key={g.id} className="flex items-center gap-2 py-1.5">
                 {done ? (
-                  <CheckCircle2 size={16} className="text-[#FF9500] shrink-0" />
+                  <CheckCircle2 size={14} className="text-[#FF9500] drop-shadow shrink-0" />
                 ) : (
-                  <Circle size={16} className="text-white/30 shrink-0" />
+                  <Circle size={14} className="text-white/70 drop-shadow shrink-0" />
                 )}
-                <span className={`text-sm ${done ? "line-through text-white/30" : "text-white"}`}>
+                <span className={`text-sm text-shadow ${done ? "line-through text-white/50" : "text-white"}`}>
                   {g.title}
                 </span>
               </div>
             );
           })}
-          <p className="text-[10px] text-white/30 text-center mt-2">
+          <p className="text-[10px] text-white/50 text-shadow text-center mt-1">
             {doneCount}/{todayGoals.length} completed
           </p>
         </div>
