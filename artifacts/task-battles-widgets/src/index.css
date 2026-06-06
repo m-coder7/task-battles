@@ -17,10 +17,44 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.text-shadow {
+/* Midnight theme (default dark) — white text with black shadow */
+.theme-midnight .widget-text {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+}
+.theme-midnight .widget-accent {
+  color: #FF9500;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+}
+.theme-midnight .widget-muted {
+  color: rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-.drop-shadow {
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+/* Ember theme — amber/orange text with warm shadow */
+.theme-ember .widget-text {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 6px rgba(80, 40, 0, 0.4);
+  color: #FFB74D;
+}
+.theme-ember .widget-accent {
+  color: #FF8C00;
+  filter: drop-shadow(0 1px 2px rgba(80, 40, 0, 0.6));
+}
+.theme-ember .widget-muted {
+  color: rgba(255, 183, 77, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+/* Light theme — dark text with white shadow */
+.theme-light .widget-text {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.7), 0 0 6px rgba(255, 255, 255, 0.3);
+  color: #1a1a1a;
+}
+.theme-light .widget-accent {
+  color: #E06B00;
+  filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.6));
+}
+.theme-light .widget-muted {
+  color: rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.7);
 }

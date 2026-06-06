@@ -1,4 +1,5 @@
 use tauri::{Manager, WebviewWindowBuilder, WebviewUrl};
+use tauri_plugin_opener::OpenerExt;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -82,6 +83,13 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn open_main_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url("taskbattles://focus", None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 // ─── Widget window spawner ────────────────────────────────────────────────────
 
 fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetState>) -> Result<(), String> {
@@ -163,7 +171,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_shared_data,
             close_widget,
-            quit_app
+            quit_app,
+            open_main_app
         ])
         .setup(|app| {
             // Keeper window to keep app alive in background

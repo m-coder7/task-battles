@@ -128,6 +128,13 @@ export default function App() {
                   refresh_token: refreshToken ?? "",
                 });
               }
+            } else if (urlStr.includes("taskbattles://focus")) {
+              // Show and focus main window
+              import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+                const win = getCurrentWindow();
+                win.show();
+                win.setFocus();
+              }).catch(() => {});
             }
           }
         });
@@ -149,9 +156,13 @@ export default function App() {
     return () => window.removeEventListener("click", onClick);
   }, [themeOpen]);
 
+  // Trigger immediate widget export from WidgetManager
+  const [widgetExportTick, setWidgetExportTick] = useState(0);
+  const triggerWidgetExport = useCallback(() => setWidgetExportTick(t => t + 1), []);
+
   // Export data + widget config for widget app
   useEffect(() => {
-    if (typeof window === "undefined" || !(window as any).__TAURI_INTERNALS__) return;
+    if (typeof window === "undefined" || !((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) return;
     async function exportData() {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
@@ -166,9 +177,9 @@ export default function App() {
       }
     }
     exportData();
-    const id = setInterval(exportData, 10000);
+    const id = setInterval(exportData, 5000);
     return () => clearInterval(id);
-  }, [goals, events]);
+  }, [goals, events, widgetExportTick]);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);
@@ -569,7 +580,7 @@ export default function App() {
           <div className="flex-1 overflow-auto p-8">
             <h2 className="text-xl font-semibold mb-6">Settings</h2>
             <div className="max-w-md space-y-4">
-              <WidgetManager />
+              <WidgetManager onWidgetChange={triggerWidgetExport} />
               <div className="p-4 rounded-xl border border-border bg-card">
                 <h3 className="text-sm font-medium mb-2">Account</h3>
                 <p className="text-xs text-muted-foreground mb-3">{user.email}</p>

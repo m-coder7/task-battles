@@ -29,7 +29,7 @@ function isDoneToday(g: Goal): boolean {
   return false;
 }
 
-export default function TaskWidget() {
+export default function TaskWidget({ theme }: { theme: string }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -53,16 +53,16 @@ export default function TaskWidget() {
   const todayGoals = goals.filter(isActiveToday);
   const doneCount = todayGoals.filter(isDoneToday).length;
 
-  if (loading) return <div className="text-sm text-shadow">Loading...</div>;
+  if (loading) return <div className="widget-muted text-sm">Loading...</div>;
 
   return (
     <div className="h-full overflow-auto">
       <div className="flex items-center gap-2 mb-2">
-        <LayoutGrid size={13} className="text-[#FF9500] drop-shadow" />
-        <span className="text-[11px] font-bold text-[#FF9500] uppercase tracking-wide text-shadow">Today's Tasks</span>
+        <LayoutGrid size={13} className="widget-accent" />
+        <span className="text-[11px] font-bold widget-accent uppercase tracking-wide">Today's Tasks</span>
       </div>
       {todayGoals.length === 0 ? (
-        <p className="text-sm text-shadow text-center py-6">No goals for today</p>
+        <p className="text-sm widget-muted text-center py-6">No goals for today</p>
       ) : (
         <div className="space-y-0.5">
           {todayGoals.map((g) => {
@@ -70,17 +70,17 @@ export default function TaskWidget() {
             return (
               <div key={g.id} className="flex items-center gap-2 py-1.5">
                 {done ? (
-                  <CheckCircle2 size={14} className="text-[#FF9500] drop-shadow shrink-0" />
+                  <CheckCircle2 size={14} className="widget-accent shrink-0" />
                 ) : (
-                  <Circle size={14} className="text-white/70 drop-shadow shrink-0" />
+                  <Circle size={14} className="widget-muted shrink-0" />
                 )}
-                <span className={`text-sm text-shadow ${done ? "line-through text-white/50" : "text-white"}`}>
+                <span className={`text-sm widget-text ${done ? "line-through opacity-50" : ""}`}>
                   {g.title}
                 </span>
               </div>
             );
           })}
-          <p className="text-[10px] text-white/50 text-shadow text-center mt-1">
+          <p className="text-[10px] widget-muted text-center mt-1">
             {doneCount}/{todayGoals.length} completed
           </p>
         </div>
