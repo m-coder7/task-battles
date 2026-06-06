@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { format, parseISO, subDays, addDays, isToday, differenceInDays } from "date-fns";
-import { ChevronLeft, ChevronRight, BookOpen, Trash2, Tag, X, Flame } from "lucide-react";
+import { ChevronLeft, ChevronRight, BookOpen, Trash2, Tag, X, Flame, Save } from "lucide-react";
 import { useDiary, MOODS, type DiaryEntry } from "@/hooks/useDiary";
 import { cn } from "@/lib/utils";
 
@@ -152,6 +152,11 @@ function WriteView({ date, entry, allEntries, onPrev, onNext, canGoForward, onSa
     }
   };
 
+  const handleSave = () => {
+    sync(content, mood, tags, streakTitle || undefined);
+    setDirty(false);
+  };
+
   const label = isToday(date) ? "Today" : format(date, "EEEE, MMMM d, yyyy");
   const streakDay = matchingStreak ? matchingStreak.currentDay : (streakTitle ? 1 : null);
 
@@ -238,6 +243,14 @@ function WriteView({ date, entry, allEntries, onPrev, onNext, canGoForward, onSa
           onChange={(e) => handleContent(e.target.value)}
           onBlur={handleBlur}
         />
+
+        <button
+          onClick={handleSave}
+          className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors self-start"
+        >
+          <Save size={14} />
+          Save Entry
+        </button>
 
         <div className="mt-3">
           <div className="flex flex-wrap gap-1.5 mb-2">

@@ -65,12 +65,15 @@ export default function WidgetManager({ onWidgetChange }: Props) {
       translucent: addTranslucent,
       theme: addTheme,
     };
-    saveToStorage([...widgets, newWidget]);
+    const updated = [...widgets, newWidget];
+    localStorage.setItem("tb_widget_config", JSON.stringify({ widgets: updated }));
+    setWidgets(updated);
     setShowAddDialog(false);
     setAddTheme("midnight");
     setAddTranslucent(true);
     setAddType("tasks");
-  }, [widgets, saveToStorage, addType, addTheme, addTranslucent]);
+    onWidgetChange();
+  }, [widgets, addType, addTheme, addTranslucent, onWidgetChange]);
 
   const removeWidget = useCallback((id: string) => {
     saveToStorage(widgets.filter((w) => w.id !== id));
