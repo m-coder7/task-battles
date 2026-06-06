@@ -5,11 +5,17 @@ import EventsWidget from "@/components/EventsWidget";
 
 export default function App() {
   const [urlWidget, setUrlWidget] = useState<string | null>(null);
+  const [theme, setTheme] = useState("midnight");
+  const [translucent, setTranslucent] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const w = params.get("widget");
+    const t = params.get("theme");
+    const tr = params.get("translucent");
     if (w) setUrlWidget(w);
+    if (t) setTheme(t);
+    if (tr !== null) setTranslucent(tr === "true");
   }, []);
 
   const handleClose = async () => {
@@ -23,25 +29,33 @@ export default function App() {
     }
   };
 
-  // Controller window with no widget param
+  const handleOpenMain = async () => {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_main_app");
+    } catch {
+      // ignore
+    }
+  };
+
   if (!urlWidget) {
     return <div className="w-full h-full bg-transparent" />;
   }
 
+  const themeClass = `theme-${theme}`;
+  const containerBg = translucent ? "bg-transparent" : "bg-black/60 backdrop-blur-md rounded-lg";
+
   return (
-    <div className="w-full h-full text-white relative overflow-hidden select-none flex flex-col">
-      {/* Invisible drag handle at very top */}
+    <div className={`w-full h-full text-white relative overflow-hidden select-none flex flex-col ${themeClass} ${containerBg}`}>
       <div
         data-tauri-drag-region
         className="shrink-0 h-5 w-full cursor-grab active:cursor-grabbing"
         style={{ WebkitAppRegion: "drag" }}
       />
-
-      {/* Content - completely transparent */}
-      <div className="overflow-hidden flex-1 px-3 pb-3">
-        {urlWidget === "progress" && <ProgressWidget />}
-        {urlWidget === "tasks" && <TaskWidget />}
-        {urlWidget === "events" && <EventsWidget />}
+      <div className="overflow-hidden flex-1 px-3 pb-3" onDoubleClick={handleOpenMain}>
+        {urlWidget === "progress" && <ProgressWidget theme={theme} />}
+        {urlWidget === "tasks" && <TaskWidget theme={theme} />}
+        {urlWidget === "events" && <EventsWidget theme={theme} />}
       </div>
     </div>
   );

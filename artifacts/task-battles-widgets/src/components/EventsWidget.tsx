@@ -9,7 +9,7 @@ interface Event {
   all_day: boolean;
 }
 
-export default function EventsWidget() {
+export default function EventsWidget({ theme }: { theme: string }) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,23 +45,23 @@ export default function EventsWidget() {
     })
     .slice(0, 6);
 
-  if (loading) return <div className="text-sm text-shadow">Loading...</div>;
+  if (loading) return <div className="widget-muted text-sm">Loading...</div>;
 
   return (
     <div className="h-full overflow-auto">
       <div className="flex items-center gap-2 mb-2">
-        <Clock size={13} className="text-[#FF9500] drop-shadow" />
-        <span className="text-[11px] font-bold text-[#FF9500] uppercase tracking-wide text-shadow">Upcoming</span>
+        <Clock size={13} className="widget-accent" />
+        <span className="text-[11px] font-bold widget-accent uppercase tracking-wide">Upcoming</span>
       </div>
       {upcoming.length === 0 ? (
-        <p className="text-sm text-shadow text-center py-6">No upcoming events</p>
+        <p className="text-sm widget-muted text-center py-6">No upcoming events</p>
       ) : (
         <div className="space-y-0.5">
           {upcoming.map((e) => (
             <div key={e.id} className="flex items-center gap-2 py-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#FF9500] shrink-0 drop-shadow" />
-              <span className="text-sm text-white truncate flex-1 text-shadow">{e.title}</span>
-              <span className="text-[10px] text-white/50 shrink-0 text-shadow">
+              <div className="w-1.5 h-1.5 rounded-full widget-accent shrink-0" />
+              <span className="text-sm widget-text truncate flex-1">{e.title}</span>
+              <span className="text-[10px] widget-muted shrink-0">
                 {e.date === today ? e.start_time : new Date(e.date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </span>
             </div>
