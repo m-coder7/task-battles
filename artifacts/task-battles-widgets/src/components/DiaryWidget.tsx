@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Smile, Meh, Frown } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 interface DiaryEntry {
   id: string; date: string; content: string;
-  mood: string; tags: string[]; createdAt: string; updatedAt: string;
+  mood: string; tags: string[]; templateId?: string; createdAt: string; updatedAt: string;
 }
 
 export default function DiaryWidget({ theme }: { theme: string }) {
@@ -15,7 +15,10 @@ export default function DiaryWidget({ theme }: { theme: string }) {
       const { invoke } = await import("@tauri-apps/api/core");
       const data: any = await invoke("read_shared_data");
       const diary = data?.diary || {};
-      const list = Object.values(diary).sort((a: any, b: any) => (b?.date || "").localeCompare(a?.date || "")).slice(0, 5) as DiaryEntry[];
+      const list = Object.values(diary)
+        .filter((e: any) => e && e.date && e.content)
+        .sort((a: any, b: any) => (b?.date || "").localeCompare(a?.date || ""))
+        .slice(0, 5) as DiaryEntry[];
       setEntries(list);
     } catch {
       setEntries([]);
@@ -25,7 +28,7 @@ export default function DiaryWidget({ theme }: { theme: string }) {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 15000);
+    const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
 

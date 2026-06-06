@@ -169,7 +169,7 @@ export default function App() {
         const goalsKey = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
         const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
         const rivalryKey = Object.keys(localStorage).find(k => k.startsWith('rivalry_profile_')) || 'rivalry_profile_anon';
-        const diaryKey = Object.keys(localStorage).find(k => k.startsWith('tb_diary_')) || 'tb_diary_anon';
+        const diaryKey = Object.keys(localStorage).find(k => k.startsWith('task_battles_diary_')) || 'task_battles_diary_anon';
         const goalsJson = localStorage.getItem(goalsKey) || '[]';
         const eventsJson = localStorage.getItem(eventsKey) || '[]';
         const rivalryJson = localStorage.getItem(rivalryKey) || '{}';
@@ -184,6 +184,27 @@ export default function App() {
     const id = setInterval(exportData, 5000);
     return () => clearInterval(id);
   }, [goals, events, widgetExportTick]);
+
+  // Process widget toggle actions from floating widgets
+  useEffect(() => {
+    if (typeof window === "undefined" || !((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) return;
+    async function processActions() {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const actions = await invoke("read_pending_actions") as Array<{type: string; goal_id: string}>;
+        for (const action of actions) {
+          if (action.type === "toggle_goal" && action.goal_id) {
+            toggleComplete(action.goal_id);
+          }
+        }
+      } catch {
+        // ignore if no pending actions
+      }
+    }
+    processActions();
+    const id = setInterval(processActions, 3000);
+    return () => clearInterval(id);
+  }, [toggleComplete]);
 
   const openNew = useCallback((date?: string, time?: string) => {
     setEditingEvent(null);

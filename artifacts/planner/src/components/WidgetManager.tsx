@@ -14,6 +14,12 @@ interface WidgetConfig {
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [];
 
+const THEME_PREVIEW: Record<WidgetTheme, { label: string; bg: string; text: string }> = {
+  midnight: { label: "Midnight", bg: "bg-gray-900", text: "text-white" },
+  ember:    { label: "Ember",    bg: "bg-orange-950", text: "text-orange-100" },
+  light:    { label: "Light",     bg: "bg-white border border-border", text: "text-gray-900" },
+};
+
 interface Props {
   onWidgetChange: () => void;
 }
@@ -23,6 +29,8 @@ export default function WidgetManager({ onWidgetChange }: Props) {
   const [isTauri, setIsTauri] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addType, setAddType] = useState<WidgetType>("tasks");
+  const [addTheme, setAddTheme] = useState<WidgetTheme>("midnight");
+  const [addTranslucent, setAddTranslucent] = useState(true);
 
   useEffect(() => {
     setIsTauri(typeof window !== "undefined" && !!((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__));
@@ -32,11 +40,8 @@ export default function WidgetManager({ onWidgetChange }: Props) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.widgets)) {
           const clean = parsed.widgets.map((w: any) => ({
-            id: w.id,
-            type: w.type,
-            enabled: w.enabled,
-            translucent: w.translucent,
-            theme: w.theme,
+            id: w.id, type: w.type, enabled: w.enabled,
+            translucent: w.translucent, theme: w.theme,
           }));
           setWidgets(clean);
           return;
@@ -57,12 +62,15 @@ export default function WidgetManager({ onWidgetChange }: Props) {
       id: `widget-${Date.now()}`,
       type: addType,
       enabled: true,
-      translucent: true,
-      theme: "midnight",
+      translucent: addTranslucent,
+      theme: addTheme,
     };
     saveToStorage([...widgets, newWidget]);
     setShowAddDialog(false);
-  }, [widgets, saveToStorage, addType]);
+    setAddTheme("midnight");
+    setAddTranslucent(true);
+    setAddType("tasks");
+  }, [widgets, saveToStorage, addType, addTheme, addTranslucent]);
 
   const removeWidget = useCallback((id: string) => {
     saveToStorage(widgets.filter((w) => w.id !== id));
@@ -132,11 +140,11 @@ export default function WidgetManager({ onWidgetChange }: Props) {
         Configure floating widgets. Install the <b>Task Battles Widgets</b> companion app to see them on your desktop. Drag and resize widgets directly on your desktop.
       </p>
 
-      {/* Add Widget Dialog */}
       {showAddDialog && (
-        <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
-          <h4 className="text-xs font-semibold">New Widget</h4>
-            <div className="flex flex-col gap-1">
+        <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-4">
+          <h4 className="text-sm font-semibold">New Widget</h4>
+
+          <div className="flex flex-col gap-1.5">
             <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Type</label>
             <div className="flex flex-wrap gap-2">
               {(["tasks", "progress", "events", "rivalry", "calendar", "dayview", "diary"] as WidgetType[]).map((t) => (
@@ -153,17 +161,57 @@ export default function WidgetManager({ onWidgetChange }: Props) {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Theme</label>
+            <div className="flex gap-2">
+              {(["midnight", "ember", "light"] as WidgetTheme[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setAddTheme(t)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                    addTheme === t
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className={`w-3 h-3 rounded-full ${THEME_PREVIEW[t].bg}`} />
+                  {THEME_PREVIEW[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Droplets size={14} className="text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">Transparent background</span>
+            </div>
+            <button
+              onClick={() => setAddTranslucent(!addTranslucent)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
+                addTranslucent ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 mt-0.5 ${
+                  addTranslucent ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex gap-2 pt-1">
             <button
               onClick={confirmAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
             >
               <Plus size={12} />
-              Add
+              Add Widget
             </button>
             <button
-              onClick={() => setShowAddDialog(false)}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+              onClick={() => { setShowAddDialog(false); setAddTheme("midnight"); setAddTranslucent(true); setAddType("tasks"); }}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
             >
               Cancel
             </button>
@@ -171,7 +219,7 @@ export default function WidgetManager({ onWidgetChange }: Props) {
         </div>
       )}
 
-      {widgets.length === 0 && (
+      {widgets.length === 0 && !showAddDialog && (
         <p className="text-xs text-muted-foreground text-center py-4 border border-dashed border-border rounded-lg">
           No widgets configured. Click "Add Widget" to create one.
         </p>
@@ -192,7 +240,21 @@ export default function WidgetManager({ onWidgetChange }: Props) {
                 <span>{typeLabel(w.type)}</span>
                 <span className="text-[10px] text-muted-foreground font-mono">#{w.id.slice(-4)}</span>
               </div>
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground ml-1">
+                <span className={`w-2 h-2 rounded-full ${THEME_PREVIEW[w.theme].bg}`} />
+                {THEME_PREVIEW[w.theme].label}
+                {w.translucent && <span className="opacity-60">· Transparent</span>}
+              </div>
               <div className="ml-auto flex items-center gap-1">
+                <select
+                  value={w.theme}
+                  onChange={(e) => updateWidget(w.id, { theme: e.target.value as WidgetTheme })}
+                  className="px-1.5 py-0.5 rounded border border-border bg-background text-[10px] focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="midnight">Midnight</option>
+                  <option value="ember">Ember</option>
+                  <option value="light">Light</option>
+                </select>
                 <button
                   onClick={() => toggleEnabled(w.id)}
                   className={`p-1.5 rounded-md transition-colors ${
@@ -211,42 +273,6 @@ export default function WidgetManager({ onWidgetChange }: Props) {
                 </button>
               </div>
             </div>
-
-            {w.enabled && (
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {/* Theme */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Theme</label>
-                  <select
-                    value={w.theme}
-                    onChange={(e) => updateWidget(w.id, { theme: e.target.value as WidgetTheme })}
-                    className="px-2 py-1 rounded-md border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="midnight">Midnight</option>
-                    <option value="ember">Ember</option>
-                    <option value="light">Light</option>
-                  </select>
-                </div>
-
-                {/* Translucent toggle */}
-                <div className="flex items-center gap-2">
-                  <Droplets size={12} className="text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Translucent</span>
-                  <button
-                    onClick={() => updateWidget(w.id, { translucent: !w.translucent })}
-                    className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
-                      w.translucent ? "bg-primary" : "bg-muted"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-3 w-3 transform rounded-full bg-white transition duration-200 mt-0.5 ${
-                        w.translucent ? "translate-x-3.5 ml-0" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         ))}
       </div>
