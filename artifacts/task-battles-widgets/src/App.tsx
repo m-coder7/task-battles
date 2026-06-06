@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import TaskWidget from "@/components/TaskWidget";
 import ProgressWidget from "@/components/ProgressWidget";
 import EventsWidget from "@/components/EventsWidget";
+import RivalryScoreWidget from "@/components/RivalryScoreWidget";
+import CalendarWidget from "@/components/CalendarWidget";
+import DayViewWidget from "@/components/DayViewWidget";
+import DiaryWidget from "@/components/DiaryWidget";
 
 export default function App() {
   const [urlWidget, setUrlWidget] = useState<string | null>(null);
@@ -17,17 +21,6 @@ export default function App() {
     if (t) setTheme(t);
     if (tr !== null) setTranslucent(tr === "true");
   }, []);
-
-  const handleClose = async () => {
-    try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      const { invoke } = await import("@tauri-apps/api/core");
-      const win = getCurrentWindow();
-      await invoke("close_widget", { label: win.label });
-    } catch {
-      // ignore
-    }
-  };
 
   const handleOpenMain = async () => {
     try {
@@ -56,6 +49,10 @@ export default function App() {
         {urlWidget === "progress" && <ProgressWidget theme={theme} />}
         {urlWidget === "tasks" && <TaskWidget theme={theme} />}
         {urlWidget === "events" && <EventsWidget theme={theme} />}
+        {urlWidget === "rivalry" && <RivalryScoreWidget theme={theme} />}
+        {urlWidget === "calendar" && <CalendarWidget theme={theme} />}
+        {urlWidget === "dayview" && <DayViewWidget theme={theme} />}
+        {urlWidget === "diary" && <DiaryWidget theme={theme} />}
       </div>
     </div>
   );

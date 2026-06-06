@@ -168,10 +168,14 @@ export default function App() {
         const { invoke } = await import("@tauri-apps/api/core");
         const goalsKey = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
         const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
+        const rivalryKey = Object.keys(localStorage).find(k => k.startsWith('rivalry_profile_')) || 'rivalry_profile_anon';
+        const diaryKey = Object.keys(localStorage).find(k => k.startsWith('tb_diary_')) || 'tb_diary_anon';
         const goalsJson = localStorage.getItem(goalsKey) || '[]';
         const eventsJson = localStorage.getItem(eventsKey) || '[]';
+        const rivalryJson = localStorage.getItem(rivalryKey) || '{}';
+        const diaryJson = localStorage.getItem(diaryKey) || '{}';
         const configJson = localStorage.getItem('tb_widget_config') || '{"widgets":[]}';
-        await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson });
+        await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson, rivalryJson, diaryJson });
       } catch {
         // ignore
       }

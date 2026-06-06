@@ -132,6 +132,10 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         let (default_w, default_h) = match widget_type.as_str() {
             "progress" => (240.0, 260.0),
             "events" => (280.0, 300.0),
+            "rivalry" => (280.0, 220.0),
+            "calendar" => (260.0, 280.0),
+            "dayview" => (300.0, 340.0),
+            "diary" => (300.0, 320.0),
             _ => (280.0, 360.0),
         };
         
