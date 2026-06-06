@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Monitor, X, Plus, LayoutGrid, Target, Clock, GripVertical, Eye, EyeOff, Droplets, Save } from "lucide-react";
+import { Monitor, X, Plus, LayoutGrid, Target, Clock, GripVertical, Eye, EyeOff, Droplets, Save, Calendar, Sun, BookOpen, Swords } from "lucide-react";
 
-export type WidgetType = "tasks" | "progress" | "events";
+export type WidgetType = "tasks" | "progress" | "events" | "rivalry" | "calendar" | "dayview" | "diary";
 export type WidgetTheme = "midnight" | "ember" | "light";
 
 interface WidgetConfig {
@@ -81,6 +81,10 @@ export default function WidgetManager({ onWidgetChange }: Props) {
     switch (type) {
       case "progress": return <Target size={14} />;
       case "events": return <Clock size={14} />;
+      case "rivalry": return <Swords size={14} />;
+      case "calendar": return <Calendar size={14} />;
+      case "dayview": return <Sun size={14} />;
+      case "diary": return <BookOpen size={14} />;
       default: return <LayoutGrid size={14} />;
     }
   };
@@ -89,6 +93,10 @@ export default function WidgetManager({ onWidgetChange }: Props) {
     switch (type) {
       case "progress": return "Progress";
       case "events": return "Events";
+      case "rivalry": return "Rivalry";
+      case "calendar": return "Calendar";
+      case "dayview": return "Day View";
+      case "diary": return "Diary";
       default: return "Tasks";
     }
   };
@@ -128,10 +136,10 @@ export default function WidgetManager({ onWidgetChange }: Props) {
       {showAddDialog && (
         <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
           <h4 className="text-xs font-semibold">New Widget</h4>
-          <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
             <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Type</label>
-            <div className="flex gap-2">
-              {(["tasks", "progress", "events"] as WidgetType[]).map((t) => (
+            <div className="flex flex-wrap gap-2">
+              {(["tasks", "progress", "events", "rivalry", "calendar", "dayview", "diary"] as WidgetType[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setAddType(t)}

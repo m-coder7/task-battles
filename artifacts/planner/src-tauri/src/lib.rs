@@ -47,6 +47,8 @@ fn export_data_for_widgets(
     goals_json: String,
     events_json: String,
     config_json: String,
+    rivalry_json: String,
+    diary_json: String,
 ) -> Result<(), String> {
     let local_app_data = dirs::data_local_dir()
         .ok_or("Could not find local app data directory")?;
@@ -60,6 +62,8 @@ fn export_data_for_widgets(
     let data = serde_json::json!({
         "goals": serde_json::from_str::<serde_json::Value>(&goals_json).unwrap_or(serde_json::json!([])),
         "events": serde_json::from_str::<serde_json::Value>(&events_json).unwrap_or(serde_json::json!([])),
+        "rivalry": serde_json::from_str::<serde_json::Value>(&rivalry_json).unwrap_or(serde_json::json!({})),
+        "diary": serde_json::from_str::<serde_json::Value>(&diary_json).unwrap_or(serde_json::json!({})),
         "config": config,
         "exported_at": chrono::Utc::now().to_rfc3339(),
     });
