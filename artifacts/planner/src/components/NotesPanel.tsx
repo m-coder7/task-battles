@@ -14,33 +14,29 @@ const FONT_FAMILIES = [
 ];
 
 const FONT_SIZES = [
-  { value: "12px", label: "12" },
-  { value: "14px", label: "14" },
-  { value: "16px", label: "16" },
-  { value: "18px", label: "18" },
-  { value: "20px", label: "20" },
-  { value: "24px", label: "24" },
+  { value: "12", label: "12" },
+  { value: "14", label: "14" },
+  { value: "16", label: "16" },
+  { value: "18", label: "18" },
+  { value: "20", label: "20" },
+  { value: "24", label: "24" },
 ];
 
-const COLOR_STYLES: Record<Note["color"], { card: string; header: string; text: string }> = {
-  default: { card: "bg-card",        header: "bg-muted/50",   text: "text-foreground" },
-  yellow:  { card: "bg-yellow-50 dark:bg-yellow-950/30",  header: "bg-yellow-100 dark:bg-yellow-900/40",  text: "text-yellow-900 dark:text-yellow-100" },
-  green:   { card: "bg-green-50 dark:bg-green-950/30",    header: "bg-green-100 dark:bg-green-900/40",    text: "text-green-900 dark:text-green-100" },
-  blue:    { card: "bg-blue-50 dark:bg-blue-950/30",      header: "bg-blue-100 dark:bg-blue-900/40",       text: "text-blue-900 dark:text-blue-100" },
-  pink:    { card: "bg-pink-50 dark:bg-pink-950/30",      header: "bg-pink-100 dark:bg-pink-900/40",       text: "text-pink-900 dark:text-pink-100" },
-  purple:  { card: "bg-purple-50 dark:bg-purple-950/30",  header: "bg-purple-100 dark:bg-purple-900/40",   text: "text-purple-900 dark:text-purple-100" },
+const COLOR_CONFIG: Record<Note["color"], { cardBg: string; cardBgDark: string; headerBg: string; headerBgDark: string; textColor: string; textColorDark: string; dot: string }> = {
+  default: { cardBg: "#ffffff", cardBgDark: "hsl(var(--card))", headerBg: "#f5f5f5", headerBgDark: "hsl(var(--muted))", textColor: "#111111", textColorDark: "hsl(var(--foreground))", dot: "bg-gray-400" },
+  yellow:  { cardBg: "#fefce8", cardBgDark: "#422006", headerBg: "#fef08a", headerBgDark: "#713f12", textColor: "#713f12", textColorDark: "#fef08a", dot: "bg-yellow-400" },
+  green:   { cardBg: "#f0fdf4", cardBgDark: "#052e16", headerBg: "#bbf7d0", headerBgDark: "#14532d", textColor: "#14532d", textColorDark: "#bbf7d0", dot: "bg-green-500" },
+  blue:    { cardBg: "#eff6ff", cardBgDark: "#172554", headerBg: "#bfdbfe", headerBgDark: "#1e3a5f", textColor: "#1e3a5f", textColorDark: "#bfdbfe", dot: "bg-blue-500" },
+  pink:    { cardBg: "#fdf2f8", cardBgDark: "#4a0d2b", headerBg: "#fbcfe8", headerBgDark: "#831843", textColor: "#831843", textColorDark: "#fbcfe8", dot: "bg-pink-400" },
+  purple:  { cardBg: "#faf5ff", cardBgDark: "#2e1065", headerBg: "#e9d5ff", headerBgDark: "#581c87", textColor: "#581c87", textColorDark: "#e9d5ff", dot: "bg-purple-500" },
 };
 
-const COLOR_DOTS: Record<Note["color"], string> = {
-  default: "bg-muted-foreground/40",
-  yellow:  "bg-yellow-400",
-  green:   "bg-green-500",
-  blue:    "bg-blue-500",
-  pink:    "bg-pink-400",
-  purple:  "bg-purple-500",
-};
+const COLORS = Object.keys(COLOR_CONFIG) as Note["color"][];
 
-const COLORS = Object.keys(COLOR_DOTS) as Note["color"][];
+function isDarkMode(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.documentElement.classList.contains("dark") || document.documentElement.classList.contains("ember");
+}
 
 export default function NotesPanel() {
   const { notes, addNote, updateNote, deleteNote, togglePin } = useNotes();
@@ -120,37 +116,44 @@ export default function NotesPanel() {
 }
 
 function NoteCard({ note, onOpen, onPin, onDelete }: { note: Note; onOpen: () => void; onPin: () => void; onDelete: () => void }) {
-  const styles = COLOR_STYLES[note.color];
+  const cfg = COLOR_CONFIG[note.color];
+  const dark = isDarkMode();
+  const bg = dark ? cfg.cardBgDark : cfg.cardBg;
+  const hdrBg = dark ? cfg.headerBgDark : cfg.headerBg;
+  const txt = dark ? cfg.textColorDark : cfg.textColor;
+
   return (
     <div
-      className={cn("break-inside-avoid rounded-xl border border-border overflow-hidden group cursor-pointer hover:shadow-md transition-shadow", styles.card)}
+      className="break-inside-avoid rounded-xl border border-border overflow-hidden group cursor-pointer hover:shadow-md transition-shadow"
+      style={{ backgroundColor: bg }}
       onClick={onOpen}
     >
       {(note.title || note.pinned) && (
-        <div className={cn("px-3 py-2 flex items-center justify-between", styles.header)}>
-          <span className={cn("text-xs font-semibold truncate", styles.text)}>{note.title || "Untitled"}</span>
+        <div className="px-3 py-2 flex items-center justify-between" style={{ backgroundColor: hdrBg }}>
+          <span className="text-xs font-semibold truncate" style={{ color: txt }}>{note.title || "Untitled"}</span>
           {note.pinned && <Pin size={11} className="text-primary shrink-0" />}
         </div>
       )}
       <div className="px-3 py-2.5">
         {note.content ? (
-          <div className={cn("text-xs leading-relaxed line-clamp-6", styles.text)} dangerouslySetInnerHTML={{ __html: note.content }} />
+          <div className="text-xs leading-relaxed line-clamp-6" style={{ color: txt }} dangerouslySetInnerHTML={{ __html: note.content }} />
         ) : (
-          <p className="text-xs text-muted-foreground/40 italic">Empty note</p>
+          <p className="text-xs italic opacity-40" style={{ color: txt }}>Empty note</p>
         )}
       </div>
       <div className="px-3 pb-2 flex items-center justify-between">
-        <span className={cn("text-[10px]", styles.text, "opacity-50")}>{format(parseISO(note.updatedAt), "MMM d")}</span>
+        <span className="text-[10px] opacity-50" style={{ color: txt }}>{format(parseISO(note.updatedAt), "MMM d")}</span>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => { e.stopPropagation(); onPin(); }}
-            className={cn("p-1 rounded hover:bg-background/60 transition-colors", styles.text)}
+            className="p-1 rounded hover:bg-black/10 transition-colors"
+            style={{ color: txt }}
           >
             {note.pinned ? <PinOff size={11} /> : <Pin size={11} />}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+            className="p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
           >
             <Trash2 size={11} />
           </button>
@@ -169,7 +172,7 @@ function NoteEditor({ note, onUpdate, onDelete, onPin, onClose }: {
 }) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [fontFamily, setFontFamily] = useState("system-ui, -apple-system, sans-serif");
-  const [fontSize, setFontSize] = useState("14px");
+  const [fontSize, setFontSize] = useState("14");
   const [showFontMenu, setShowFontMenu] = useState(false);
   const [showSizeMenu, setShowSizeMenu] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,11 +199,10 @@ function NoteEditor({ note, onUpdate, onDelete, onPin, onClose }: {
     handleInput();
   }, [handleInput]);
 
-  const handleColorChange = useCallback((color: Note["color"]) => {
-    onUpdate(note.id, { color });
-  }, [note.id, onUpdate]);
-
-  const styles = COLOR_STYLES[note.color];
+  const cfg = COLOR_CONFIG[note.color];
+  const dark = isDarkMode();
+  const editorBg = dark ? cfg.cardBgDark : cfg.cardBg;
+  const editorText = dark ? cfg.textColorDark : cfg.textColor;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -234,8 +236,8 @@ function NoteEditor({ note, onUpdate, onDelete, onPin, onClose }: {
           {COLORS.map((c) => (
             <button
               key={c}
-              onClick={() => handleColorChange(c)}
-              className={cn("w-4 h-4 rounded-full transition-transform hover:scale-125", COLOR_DOTS[c], note.color === c && "ring-2 ring-offset-1 ring-foreground/40 scale-110")}
+              onClick={() => onUpdate(note.id, { color: c })}
+              className={cn("w-4 h-4 rounded-full transition-transform hover:scale-125", COLOR_CONFIG[c].dot, note.color === c && "ring-2 ring-offset-1 ring-foreground/40 scale-110")}
             />
           ))}
         </div>
@@ -277,14 +279,14 @@ function NoteEditor({ note, onUpdate, onDelete, onPin, onClose }: {
             onClick={() => { setShowSizeMenu(!showSizeMenu); setShowFontMenu(false); }}
             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            {fontSize.replace("px", "")}
+            {fontSize}
           </button>
           {showSizeMenu && (
             <div className="absolute top-full left-0 z-50 mt-1 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[60px]">
               {FONT_SIZES.map((s) => (
                 <button
                   key={s.value}
-                  onClick={() => { setFontSize(s.value); setShowSizeMenu(false); editorRef.current?.focus(); document.execCommand("fontSize", false, "7"); const fontEl = editorRef.current?.querySelector("font[size='7']"); if (fontEl) { (fontEl as HTMLElement).removeAttribute("size"); (fontEl as HTMLElement).style.fontSize = s.value; }}}
+                  onClick={() => { setFontSize(s.value); setShowSizeMenu(false); editorRef.current?.focus(); document.execCommand("fontSize", false, "7"); const fontEl = editorRef.current?.querySelector("font[size='7']"); if (fontEl) { (fontEl as HTMLElement).removeAttribute("size"); (fontEl as HTMLElement).style.fontSize = s.value + "px"; } }}
                   className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors", fontSize === s.value ? "text-primary font-medium" : "text-foreground")}
                 >
                   {s.label}
@@ -319,14 +321,14 @@ function NoteEditor({ note, onUpdate, onDelete, onPin, onClose }: {
         </button>
       </div>
 
-      <div className={cn("flex-1 overflow-auto", styles.card)}>
+      <div className="flex-1 overflow-auto" style={{ backgroundColor: editorBg }}>
         <div
           ref={editorRef}
           contentEditable
           suppressContentEditableWarning
           onInput={handleInput}
           className="w-full min-h-full px-8 py-6 text-sm outline-none leading-relaxed focus:ring-0 focus:outline-none"
-          style={{ fontFamily, fontSize, color: "var(--tw-foreground, inherit)" }}
+          style={{ fontFamily, fontSize: fontSize + "px", color: editorText }}
           data-placeholder="Start writing..."
         />
       </div>
@@ -334,11 +336,8 @@ function NoteEditor({ note, onUpdate, onDelete, onPin, onClose }: {
       <style>{`
         [contenteditable]:empty:before {
           content: attr(data-placeholder);
-          color: var(--tw-text-muted-foreground, #999);
+          color: #999;
           pointer-events: none;
-        }
-        [contenteditable] {
-          color: inherit;
         }
       `}</style>
 
