@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Monitor, X, Plus, LayoutGrid, Target, Clock, GripVertical, Eye, EyeOff, Droplets, Save, Calendar, Sun, BookOpen, Swords } from "lucide-react";
 
 export type WidgetType = "tasks" | "progress" | "events" | "rivalry" | "calendar" | "dayview" | "diary";
@@ -20,73 +20,94 @@ const THEME_PREVIEW: Record<WidgetTheme, { label: string; bg: string; text: stri
   light:    { label: "Light",     bg: "bg-white border border-border", text: "text-gray-900" },
 };
 
+async function exportWidgetsNow() {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const goalsKey = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
+    const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
+    const rivalryKey = Object.keys(localStorage).find(k => k.startsWith('rivalry_profile_')) || 'rivalry_profile_anon';
+    const diaryKey = Object.keys(localStorage).find(k => k.startsWith('task_battles_diary_')) || 'task_battles_diary_anon';
+    const goalsJson = localStorage.getItem(goalsKey) || '[]';
+    const eventsJson = localStorage.getItem(eventsKey) || '[]';
+    const rivalryJson = localStorage.getItem(rivalryKey) || '{}';
+    const diaryJson = localStorage.getItem(diaryKey) || '{}';
+    const configJson = localStorage.getItem('tb_widget_config') || '{"widgets":[]}';
+    await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson, rivalryJson, diaryJson });
+  } catch (e) {
+    console.error("Widget export error:", e);
+  }
+}
+
 interface Props {
-  onWidgetChange: () => void;
+  onWidgetChange?: () => void;
 }
 
 export default function WidgetManager({ onWidgetChange }: Props) {
-  const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
-  const [isTauri, setIsTauri] = useState(false);
+  const [widgets, setWidgets] = useState<WidgetConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem("tb_widget_config");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.widgets)) {
+          return parsed.widgets.map((w: any) => ({
+            id: w.id, type: w.type, enabled: w.enabled !== false,
+            translucent: w.translucent !== false, theme: w.theme || "midnight",
+          }));
+        }
+      }
+    } catch {}
+    return DEFAULT_WIDGETS;
+  });
+
+  const [isTauri, setIsTauri] = useState(
+    typeof window !== "undefined" && !!((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)
+  );
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addType, setAddType] = useState<WidgetType>("tasks");
   const [addTheme, setAddTheme] = useState<WidgetTheme>("midnight");
   const [addTranslucent, setAddTranslucent] = useState(true);
 
-  useEffect(() => {
-    setIsTauri(typeof window !== "undefined" && !!((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__));
-    const saved = localStorage.getItem("tb_widget_config");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.widgets)) {
-          const clean = parsed.widgets.map((w: any) => ({
-            id: w.id, type: w.type, enabled: w.enabled,
-            translucent: w.translucent, theme: w.theme,
-          }));
-          setWidgets(clean);
-          return;
-        }
-      } catch {}
-    }
-    setWidgets(DEFAULT_WIDGETS);
-  }, []);
-
-  const saveToStorage = useCallback((list: WidgetConfig[]) => {
+  function persist(list: WidgetConfig[]) {
     setWidgets(list);
     localStorage.setItem("tb_widget_config", JSON.stringify({ widgets: list }));
-    onWidgetChange();
-  }, [onWidgetChange]);
+    onWidgetChange?.();
+    exportWidgetsNow();
+  }
 
-  const confirmAdd = useCallback(() => {
+  function handleAdd() {
     const newWidget: WidgetConfig = {
-      id: `widget-${Date.now()}`,
+      id: `w-${Date.now()}`,
       type: addType,
       enabled: true,
       translucent: addTranslucent,
       theme: addTheme,
     };
-    const updated = [...widgets, newWidget];
-    localStorage.setItem("tb_widget_config", JSON.stringify({ widgets: updated }));
-    setWidgets(updated);
+    persist([...widgets, newWidget]);
     setShowAddDialog(false);
+    setAddType("tasks");
     setAddTheme("midnight");
     setAddTranslucent(true);
-    setAddType("tasks");
-    onWidgetChange();
-  }, [widgets, addType, addTheme, addTranslucent, onWidgetChange]);
+  }
 
-  const removeWidget = useCallback((id: string) => {
-    saveToStorage(widgets.filter((w) => w.id !== id));
-  }, [widgets, saveToStorage]);
+  function handleRemove(id: string) {
+    persist(widgets.filter((w) => w.id !== id));
+  }
 
-  const updateWidget = useCallback((id: string, patch: Partial<WidgetConfig>) => {
-    saveToStorage(widgets.map((w) => (w.id === id ? { ...w, ...patch } : w)));
-  }, [widgets, saveToStorage]);
+  function handleToggle(id: string) {
+    persist(widgets.map((w) => w.id === id ? { ...w, enabled: !w.enabled } : w));
+  }
 
-  const toggleEnabled = useCallback((id: string) => {
-    const w = widgets.find((x) => x.id === id);
-    if (w) updateWidget(id, { enabled: !w.enabled });
-  }, [widgets, updateWidget]);
+  function handleTheme(id: string, theme: WidgetTheme) {
+    persist(widgets.map((w) => w.id === id ? { ...w, theme } : w));
+  }
+
+  function handleReset() {
+    persist(DEFAULT_WIDGETS);
+  }
+
+  useEffect(() => {
+    setIsTauri(typeof window !== "undefined" && !!((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__));
+  }, []);
 
   const typeIcon = (type: WidgetType) => {
     switch (type) {
@@ -140,13 +161,12 @@ export default function WidgetManager({ onWidgetChange }: Props) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Configure floating widgets. Install the <b>Task Battles Widgets</b> companion app to see them on your desktop. Drag and resize widgets directly on your desktop.
+        Configure floating widgets. Install the <b>Task Battles Widgets</b> companion app to see them on your desktop.
       </p>
 
       {showAddDialog && (
         <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-4">
           <h4 className="text-sm font-semibold">New Widget</h4>
-
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">Type</label>
             <div className="flex flex-wrap gap-2">
@@ -173,9 +193,7 @@ export default function WidgetManager({ onWidgetChange }: Props) {
                   key={t}
                   onClick={() => setAddTheme(t)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                    addTheme === t
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    addTheme === t ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <span className={`w-3 h-3 rounded-full ${THEME_PREVIEW[t].bg}`} />
@@ -190,32 +208,22 @@ export default function WidgetManager({ onWidgetChange }: Props) {
               <Droplets size={14} className="text-muted-foreground" />
               <span className="text-xs font-medium text-foreground">Transparent background</span>
             </div>
-            <button
-              onClick={() => setAddTranslucent(!addTranslucent)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
-                addTranslucent ? "bg-primary" : "bg-muted"
-              }`}
+            <button onClick={() => setAddTranslucent(!addTranslucent)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${addTranslucent ? "bg-primary" : "bg-muted"}`}
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 mt-0.5 ${
-                  addTranslucent ? "translate-x-4" : "translate-x-0.5"
-                }`}
-              />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 mt-0.5 ${addTranslucent ? "translate-x-4" : "translate-x-0.5"}`} />
             </button>
           </div>
 
           <div className="flex gap-2 pt-1">
-            <button
-              onClick={confirmAdd}
+            <button onClick={handleAdd}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
             >
               <Plus size={12} />
               Add Widget
             </button>
-            <button
-              onClick={() => { setShowAddDialog(false); setAddTheme("midnight"); setAddTranslucent(true); setAddType("tasks"); }}
-              className="px-4 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
-            >
+            <button onClick={() => setShowAddDialog(false)}
+              className="px-4 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors">
               Cancel
             </button>
           </div>
@@ -230,11 +238,8 @@ export default function WidgetManager({ onWidgetChange }: Props) {
 
       <div className="space-y-2 max-h-[400px] overflow-y-auto">
         {widgets.map((w) => (
-          <div
-            key={w.id}
-            className={`p-3 rounded-lg border transition-colors ${
-              w.enabled ? "border-border bg-muted/50" : "border-border/50 bg-muted/20 opacity-60"
-            }`}
+          <div key={w.id}
+            className={`p-3 rounded-lg border transition-colors ${w.enabled ? "border-border bg-muted/50" : "border-border/50 bg-muted/20 opacity-60"}`}
           >
             <div className="flex items-center gap-2">
               <GripVertical size={14} className="text-muted-foreground shrink-0" />
@@ -249,26 +254,20 @@ export default function WidgetManager({ onWidgetChange }: Props) {
                 {w.translucent && <span className="opacity-60">· Transparent</span>}
               </div>
               <div className="ml-auto flex items-center gap-1">
-                <select
-                  value={w.theme}
-                  onChange={(e) => updateWidget(w.id, { theme: e.target.value as WidgetTheme })}
+                <select value={w.theme} onChange={(e) => handleTheme(w.id, e.target.value as WidgetTheme)}
                   className="px-1.5 py-0.5 rounded border border-border bg-background text-[10px] focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="midnight">Midnight</option>
                   <option value="ember">Ember</option>
                   <option value="light">Light</option>
                 </select>
-                <button
-                  onClick={() => toggleEnabled(w.id)}
-                  className={`p-1.5 rounded-md transition-colors ${
-                    w.enabled ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-muted"
-                  }`}
+                <button onClick={() => handleToggle(w.id)}
+                  className={`p-1.5 rounded-md transition-colors ${w.enabled ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-muted"}`}
                   title={w.enabled ? "Hide widget" : "Show widget"}
                 >
                   {w.enabled ? <Eye size={13} /> : <EyeOff size={13} />}
                 </button>
-                <button
-                  onClick={() => removeWidget(w.id)}
+                <button onClick={() => handleRemove(w.id)}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
                   title="Remove widget"
                 >
@@ -284,8 +283,7 @@ export default function WidgetManager({ onWidgetChange }: Props) {
         <span className="text-[10px] text-muted-foreground">
           {widgets.filter((w) => w.enabled).length} of {widgets.length} active
         </span>
-        <button
-          onClick={() => saveToStorage(DEFAULT_WIDGETS)}
+        <button onClick={handleReset}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
         >
           <Save size={12} />
