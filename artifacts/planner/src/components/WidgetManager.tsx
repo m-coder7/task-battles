@@ -161,7 +161,7 @@ export default function WidgetManager({ onWidgetChange }: Props) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Configure floating widgets. Install the <b>Task Battles Widgets</b> companion app to see them on your desktop.
+        Floating widgets require the <b>Task Battles Widgets</b> companion app to be <b>running</b>. If it's installed but you don't see widgets, launch it from your Start Menu.
       </p>
 
       {showAddDialog && (

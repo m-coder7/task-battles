@@ -297,11 +297,6 @@ pub fn run() {
             })
             .build(app)?;
 
-        // Open devtools for debugging
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.open_devtools();
-        }
-
         // Check if --hidden flag was passed (autostart)
         let args: Vec<String> = env::args().collect();
         let hidden = args.contains(&"--hidden".to_string());
