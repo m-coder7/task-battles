@@ -174,17 +174,22 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     let config = data.get("config").cloned().unwrap_or(serde_json::json!({ "widgets": [] }));
     let widgets = config.get("widgets").and_then(|w| w.as_array()).cloned().unwrap_or_default();
     
-    // Ghost widget safeguard: don't spawn widgets if the main app hasn't exported data yet
-    if data.get("exported_at").is_none() {
-        return Ok(());
-    }
-
     // Save current positions before potentially closing windows
     save_current_positions(app, state);
     
-    let mut expected_labels: Vec<String> = Vec::new();
+    // Collect all enabled widget IDs from config
+    let enabled_ids: HashSet<String> = widgets.iter()
+        .filter(|w| w.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true))
+        .filter_map(|w| w.get("id").and_then(|v| v.as_str()).map(String::from))
+        .collect();
+    
+    // Remove user_closed entries for widgets that are now enabled in config
+    // This allows re-enabling a previously closed widget
     let mut user_closed = state.user_closed.lock().unwrap();
+    user_closed.retain(|id| !enabled_ids.contains(id));
     let positions = state.window_positions.lock().unwrap();
+    
+    let mut expected_labels: Vec<String> = Vec::new();
     
     for (index, w) in widgets.iter().enumerate() {
         let id = w.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
