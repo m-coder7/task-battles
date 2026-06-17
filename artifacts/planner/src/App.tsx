@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   format, addMonths, subMonths, startOfWeek, endOfWeek,
   addWeeks, subWeeks, addDays, parseISO, isToday,
@@ -161,8 +161,12 @@ export default function App() {
   const triggerWidgetExport = useCallback(() => setWidgetExportTick(t => t + 1), []);
 
   // Export data + widget config for widget app
+  // Export data + widget config for widget app (debounced)
+  const exportTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
     if (typeof window === "undefined" || !((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) return;
+    
     async function exportData() {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
@@ -181,9 +185,20 @@ export default function App() {
         console.error("[Widget] Export failed:", e);
       }
     }
-    exportData();
-    const id = setInterval(exportData, 5000);
-    return () => clearInterval(id);
+    
+    // Clear previous timeout
+    if (exportTimeoutRef.current) {
+      clearTimeout(exportTimeoutRef.current);
+    }
+    
+    // Debounce: wait 500ms before exporting
+    exportTimeoutRef.current = setTimeout(exportData, 500);
+    
+    return () => {
+      if (exportTimeoutRef.current) {
+        clearTimeout(exportTimeoutRef.current);
+      }
+    };
   }, [goals, events, widgetExportTick]);
 
   // Process widget toggle actions from floating widgets

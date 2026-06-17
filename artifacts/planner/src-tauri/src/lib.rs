@@ -68,7 +68,7 @@ fn export_data_for_widgets(
         "exported_at": chrono::Utc::now().to_rfc3339(),
     });
 
-    std::fs::write(&path, serde_json::to_string_pretty(&data).unwrap_or_default())
+    std::fs::write(&path, serde_json::to_string(&data).unwrap_or_default())
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -215,6 +215,98 @@ fn poll_widget_toggles(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, 
 }
 
 #[tauri::command]
+async fn launch_widget_app() -> Result<(), String> {
+    // Check if already running (platform-specific)
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        
+        let output = tokio::process::Command::new("tasklist")
+            .args(&["/FI", "IMAGENAME eq task-battles-widgets.exe", "/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to check running processes: {}", e))?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if stdout.contains("task-battles-widgets.exe") {
+            return Ok(()); // Already running
+        }
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        let output = tokio::process::Command::new("pgrep")
+            .arg("-f")
+            .arg("Task Battles Widgets")
+            .output()
+            .await
+            .map_err(|e| format!("Failed to check running processes: {}", e))?;
+        if output.status.success() {
+            return Ok(()); // Already running
+        }
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        let output = tokio::process::Command::new("pgrep")
+            .arg("-f")
+            .arg("task-battles-widgets")
+            .output()
+            .await
+            .map_err(|e| format!("Failed to check running processes: {}", e))?;
+        if output.status.success() {
+            return Ok(()); // Already running
+        }
+    }
+
+    // Platform-specific installation paths
+    #[cfg(target_os = "windows")]
+    let possible_paths = vec![
+        dirs::data_local_dir().unwrap_or_default()
+            .join("Task Battles Widgets")
+            .join("task-battles-widgets.exe"),
+        dirs::data_local_dir().unwrap_or_default()
+            .join("Programs")
+            .join("Task Battles Widgets")
+            .join("task-battles-widgets.exe"),
+        std::path::PathBuf::from("C:\\Program Files\\Task Battles Widgets\\task-battles-widgets.exe"),
+        std::path::PathBuf::from("C:\\Program Files (x86)\\Task Battles Widgets\\task-battles-widgets.exe"),
+    ];
+    
+    #[cfg(target_os = "macos")]
+    let possible_paths = vec![
+        std::path::PathBuf::from("/Applications/Task Battles Widgets.app/Contents/MacOS/Task Battles Widgets"),
+        dirs::home_dir().unwrap_or_default()
+            .join("Applications")
+            .join("Task Battles Widgets.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("Task Battles Widgets"),
+    ];
+    
+    #[cfg(target_os = "linux")]
+    let possible_paths = vec![
+        dirs::home_dir().unwrap_or_default()
+            .join(".local")
+            .join("bin")
+            .join("task-battles-widgets"),
+        std::path::PathBuf::from("/usr/bin/task-battles-widgets"),
+        std::path::PathBuf::from("/usr/local/bin/task-battles-widgets"),
+    ];
+    
+    for path in possible_paths {
+        if path.exists() {
+            match std::process::Command::new(&path).spawn() {
+                Ok(_) => return Ok(()),
+                Err(e) => return Err(format!("Found widget app at {:?} but failed to launch: {}", path, e)),
+            }
+        }
+    }
+    
+    Err("Task Battles Widgets app not found. Please install it first.".to_string())
+}
+
+#[tauri::command]
 fn read_pending_actions() -> Result<Vec<serde_json::Value>, String> {
     let path = dirs::data_local_dir()
         .ok_or("Could not find local app data directory")?
@@ -263,7 +355,8 @@ pub fn run() {
             load_widget_positions,
             toggle_goal_in_widget,
             poll_widget_toggles,
-            read_pending_actions
+            read_pending_actions,
+            launch_widget_app
         ]);
 
     builder = builder.setup(|app| {
@@ -296,6 +389,15 @@ pub fn run() {
                 }
             })
             .build(app)?;
+
+        // Enable autostart (cross-platform)
+        {
+            use tauri_plugin_autostart::ManagerExt;
+            match app.autolaunch().enable() {
+                Ok(_) => println!("[TaskBattles] Autostart enabled"),
+                Err(e) => eprintln!("[TaskBattles] Failed to enable autostart: {}", e),
+            }
+        }
 
         // Check if --hidden flag was passed (autostart)
         let args: Vec<String> = env::args().collect();
