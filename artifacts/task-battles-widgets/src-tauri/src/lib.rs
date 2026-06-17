@@ -1,4 +1,6 @@
 use tauri::{Manager, WebviewWindowBuilder, WebviewUrl};
+use tauri::tray::TrayIconBuilder;
+use tauri::menu::{Menu, MenuItem};
 use tauri_plugin_opener::OpenerExt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -74,6 +76,93 @@ fn save_positions(map: &HashMap<String, WindowPos>) {
     let _ = std::fs::write(positions_path(), serde_json::to_string(map).unwrap_or_default());
 }
 
+// ─── Monitor and coordinate helpers ──────────────────────────────────────────
+
+/// Get work areas and scale factors for all available monitors
+/// Returns: Vec<(x, y, width, height, scale_factor)>
+fn get_monitor_work_areas(app: &tauri::AppHandle) -> Vec<(i32, i32, u32, u32, f64)> {
+    let mut monitors = Vec::new();
+    
+    if let Ok(available) = app.available_monitors() {
+        for monitor in available {
+            let scale = monitor.scale_factor();
+            
+            // Use work area (excludes taskbar)
+            let work_area = monitor.work_area();
+            let wpos = work_area.position;
+            let wsize = work_area.size;
+            
+            monitors.push((wpos.x, wpos.y, wsize.width, wsize.height, scale));
+        }
+    }
+    
+    // Fallback: assume a single 1920x1080 monitor at 100% DPI
+    if monitors.is_empty() {
+        monitors.push((0, 0, 1920, 1080, 1.0));
+    }
+    
+    monitors
+}
+
+/// Convert physical pixels to logical pixels
+fn physical_to_logical(physical: i32, scale: f64) -> f64 {
+    physical as f64 / scale
+}
+
+/// Convert logical pixels to physical pixels
+fn logical_to_physical(logical: f64, scale: f64) -> i32 {
+    (logical * scale).round() as i32
+}
+
+/// Clamp a window position to ensure it's visible on at least one monitor
+/// Returns clamped (x, y) in logical coordinates
+fn clamp_to_monitors(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    monitors: &[(i32, i32, u32, u32, f64)],
+) -> (f64, f64) {
+    // Find the monitor that contains the most of the window
+    let mut best_monitor = None;
+    let mut best_overlap = 0.0;
+    
+    for &(mon_x, mon_y, mon_w, mon_h, scale) in monitors {
+        let mon_x_log = physical_to_logical(mon_x, scale);
+        let mon_y_log = physical_to_logical(mon_y, scale);
+        let mon_w_log = physical_to_logical(mon_w as i32, scale);
+        let mon_h_log = physical_to_logical(mon_h as i32, scale);
+        
+        // Calculate overlap
+        let overlap_x = (x + width).min(mon_x_log + mon_w_log) - x.max(mon_x_log);
+        let overlap_y = (y + height).min(mon_y_log + mon_h_log) - y.max(mon_y_log);
+        let overlap = overlap_x.max(0.0) * overlap_y.max(0.0);
+        
+        if overlap > best_overlap {
+            best_overlap = overlap;
+            best_monitor = Some((mon_x_log, mon_y_log, mon_w_log, mon_h_log));
+        }
+    }
+    
+    // If window doesn't overlap any monitor, use the first monitor
+    let (mon_x, mon_y, mon_w, mon_h) = best_monitor.unwrap_or_else(|| {
+        let &(mx, my, mw, mh, scale) = monitors.first().unwrap();
+        (
+            physical_to_logical(mx, scale),
+            physical_to_logical(my, scale),
+            physical_to_logical(mw as i32, scale),
+            physical_to_logical(mh as i32, scale),
+        )
+    });
+    
+    // Clamp to ensure at least 50px of the window is visible
+    let min_visible = 50.0;
+    let clamped_x = x.max(mon_x - width + min_visible).min(mon_x + mon_w - min_visible);
+    let clamped_y = y.max(mon_y - height + min_visible).min(mon_y + mon_h - min_visible);
+    
+    (clamped_x, clamped_y)
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -111,7 +200,8 @@ fn close_widget(app: tauri::AppHandle, state: tauri::State<WidgetState>, label: 
 }
 
 #[tauri::command]
-fn quit_app(app: tauri::AppHandle) {
+fn quit_app(app: tauri::AppHandle, state: tauri::State<WidgetState>) {
+    save_current_positions(&app, &state);
     for (_, window) in app.webview_windows() {
         let _ = window.close();
     }
@@ -155,17 +245,40 @@ fn write_action(action_json: String) -> Result<(), String> {
 // ─── Save widget window positions ─────────────────────────────────────────────
 
 fn save_current_positions(app: &tauri::AppHandle, state: &tauri::State<WidgetState>) {
+    let monitors = get_monitor_work_areas(app);
     let mut positions = state.window_positions.lock().unwrap();
+    
     for (label, window) in app.webview_windows() {
         if !label.starts_with("widget-") { continue; }
+        
         if let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) {
+            // Find the monitor this window is on to get its scale factor
+            let scale = monitors.iter()
+                .find(|&&(mon_x, mon_y, mon_w, mon_h, _)| {
+                    let wx = pos.x;
+                    let wy = pos.y;
+                    wx >= mon_x && wx < mon_x + mon_w as i32 &&
+                    wy >= mon_y && wy < mon_y + mon_h as i32
+                })
+                .map(|&(_, _, _, _, scale)| scale)
+                .unwrap_or(1.0);
+            
+            // Convert physical to logical coordinates
+            let logical_x = physical_to_logical(pos.x, scale);
+            let logical_y = physical_to_logical(pos.y, scale);
+            let logical_w = physical_to_logical(size.width as i32, scale);
+            let logical_h = physical_to_logical(size.height as i32, scale);
+            
             let id = label.strip_prefix("widget-").unwrap_or(&label).to_string();
             positions.insert(id, WindowPos {
-                x: pos.x as f64,
-                y: pos.y as f64,
-                width: size.width as f64,
-                height: size.height as f64,
+                x: logical_x,
+                y: logical_y,
+                width: logical_w,
+                height: logical_h,
             });
+            
+            println!("[WidgetApp] Saved {} position: logical ({:.1}, {:.1}) size {:.1}x{:.1} (scale: {:.2})", 
+                label, logical_x, logical_y, logical_w, logical_h, scale);
         }
     }
     save_positions(&positions);
@@ -183,6 +296,10 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     if widgets.is_empty() {
         println!("[WidgetApp] No widgets configured, skipping spawn");
     }
+
+    // Get monitor information for coordinate handling
+    let monitors = get_monitor_work_areas(app);
+    println!("[WidgetApp] Found {} monitor(s)", monitors.len());
 
     // Save current positions before potentially closing windows
     save_current_positions(app, state);
@@ -221,14 +338,32 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         
         expected_labels.push(label.clone());
         
-        if app.get_webview_window(&label).is_some() {
-            println!("[WidgetApp] {} already open, skipping", label);
+        if let Some(window) = app.get_webview_window(&label) {
+            // Reposition existing window to saved position
+            if let Some(pos) = positions.get(&id) {
+                // Clamp position to ensure it's visible on screen
+                let (clamped_x, clamped_y) = clamp_to_monitors(
+                    pos.x, pos.y, pos.width, pos.height, &monitors
+                );
+                
+                let _ = window.set_position(tauri::Position::Logical(
+                    tauri::LogicalPosition { x: clamped_x, y: clamped_y }
+                ));
+                let _ = window.set_size(tauri::Size::Logical(
+                    tauri::LogicalSize { width: pos.width, height: pos.height }
+                ));
+                println!("[WidgetApp] Repositioned {} to logical ({:.1}, {:.1}) size {:.1}x{:.1}", 
+                    label, clamped_x, clamped_y, pos.width, pos.height);
+            }
             continue;
         }
         
         let saved_pos = positions.get(&id);
-        let x = saved_pos.map(|p| p.x).unwrap_or_else(|| 50.0 + (index as f64 * 30.0));
-        let y = saved_pos.map(|p| p.y).unwrap_or_else(|| 50.0 + (index as f64 * 30.0));
+        let default_x = 50.0 + (index as f64 * 30.0);
+        let default_y = 50.0 + (index as f64 * 30.0);
+        let x = saved_pos.map(|p| p.x).unwrap_or(default_x);
+        let y = saved_pos.map(|p| p.y).unwrap_or(default_y);
+        
         let (default_w, default_h) = match widget_type.as_str() {
             "progress" => (240.0, 260.0),
             "events" => (280.0, 300.0),
@@ -241,15 +376,19 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         let width = saved_pos.map(|p| p.width).unwrap_or(default_w);
         let height = saved_pos.map(|p| p.height).unwrap_or(default_h);
         
+        // Clamp position to ensure it's visible on screen
+        let (clamped_x, clamped_y) = clamp_to_monitors(x, y, width, height, &monitors);
+        
         let url = format!("/?widget={}&theme={}&translucent={}", widget_type, theme, translucent);
         
-        println!("[WidgetApp] Creating window {} at ({}, {}) size {}x{}", label, x, y, width, height);
+        println!("[WidgetApp] Creating window {} at logical ({:.1}, {:.1}) size {:.1}x{:.1}", 
+            label, clamped_x, clamped_y, width, height);
         
         match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
             .title(&id)
             .inner_size(width, height)
             .min_inner_size(180.0, 180.0)
-            .position(x, y)
+            .position(clamped_x, clamped_y)
             .decorations(false)
             .transparent(true)
             .skip_taskbar(true)
@@ -303,6 +442,36 @@ pub fn run() {
         .setup(|app| {
             println!("[WidgetApp] Setup phase");
             
+            // Create tray icon to keep app alive
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&quit_item])?;
+            
+            let _tray = TrayIconBuilder::new()
+                .tooltip("Task Battles Widgets")
+                .menu(&menu)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        println!("[WidgetApp] Quit requested from tray");
+                        let state: tauri::State<WidgetState> = app.state::<WidgetState>();
+                        save_current_positions(app, &state);
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+            
+            println!("[WidgetApp] Tray icon created");
+            
+            // Enable autostart (cross-platform)
+            {
+                let app_handle = app.app_handle().clone();
+                use tauri_plugin_autostart::ManagerExt;
+                match app_handle.autolaunch().enable() {
+                    Ok(_) => println!("[WidgetApp] Autostart enabled"),
+                    Err(e) => eprintln!("[WidgetApp] Failed to enable autostart: {}", e),
+                }
+            }
+            
             // Keeper window to keep app alive in background
             match WebviewWindowBuilder::new(app, "keeper", WebviewUrl::App("/".into()))
                 .inner_size(1.0, 1.0)
@@ -320,21 +489,70 @@ pub fn run() {
             let app_handle = app.app_handle().clone();
             let state: tauri::State<WidgetState> = app.state::<WidgetState>();
             
-            // Initial spawn
+            // Initial spawn - immediate
             println!("[WidgetApp] Initial spawn...");
             match spawn_or_update_widgets(&app_handle, &state) {
                 Ok(_) => println!("[WidgetApp] Initial spawn complete"),
                 Err(e) => eprintln!("[WidgetApp] Initial spawn failed: {}", e),
             }
             
-            // Poll for config changes
+            // Watch for config changes using file system notifications
             std::thread::spawn(move || {
+                use notify::{Watcher, RecursiveMode, Event, EventKind};
+                use std::sync::mpsc::channel;
+                use std::time::Duration;
+                
+                let (tx, rx) = channel();
+                
+                let mut watcher = match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+                    if let Ok(event) = res {
+                        if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                            let _ = tx.send(());
+                        }
+                    }
+                }) {
+                    Ok(w) => w,
+                    Err(e) => {
+                        eprintln!("[WidgetApp] Failed to create file watcher: {}", e);
+                        return;
+                    }
+                };
+                
+                let widgets_path = dirs::data_local_dir()
+                    .unwrap_or_default()
+                    .join("TaskBattles")
+                    .join("widgets.json");
+                
+                let watch_dir = widgets_path.parent().unwrap();
+                
+                if let Err(e) = watcher.watch(watch_dir, RecursiveMode::NonRecursive) {
+                    eprintln!("[WidgetApp] Failed to watch directory {:?}: {}", watch_dir, e);
+                    return;
+                }
+                
+                println!("[WidgetApp] Watching {:?} for changes", watch_dir);
+                
+                // Debounce: wait 100ms after last change before spawning
+                let mut last_change = std::time::Instant::now();
                 loop {
-                    std::thread::sleep(Duration::from_secs(5));
-                    let state: tauri::State<WidgetState> = app_handle.state::<WidgetState>();
-                    match spawn_or_update_widgets(&app_handle, &state) {
-                        Ok(_) => {}
-                        Err(e) => eprintln!("[WidgetApp] Poll spawn failed: {}", e),
+                    match rx.recv_timeout(Duration::from_millis(100)) {
+                        Ok(_) => {
+                            last_change = std::time::Instant::now();
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                            if last_change.elapsed() >= Duration::from_millis(100) && last_change.elapsed() < Duration::from_millis(200) {
+                                println!("[WidgetApp] Config changed, spawning widgets...");
+                                let state: tauri::State<WidgetState> = app_handle.state::<WidgetState>();
+                                match spawn_or_update_widgets(&app_handle, &state) {
+                                    Ok(_) => println!("[WidgetApp] Spawn complete"),
+                                    Err(e) => eprintln!("[WidgetApp] Spawn failed: {}", e),
+                                }
+                            }
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                            eprintln!("[WidgetApp] File watcher disconnected");
+                            break;
+                        }
                     }
                 }
             });

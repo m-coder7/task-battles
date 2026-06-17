@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Monitor, X, Plus, LayoutGrid, Target, Clock, GripVertical, Eye, EyeOff, Droplets, Save, Calendar, Sun, BookOpen, Swords } from "lucide-react";
 
 export type WidgetType = "tasks" | "progress" | "events" | "rivalry" | "calendar" | "dayview" | "diary";
@@ -33,8 +33,19 @@ async function exportWidgetsNow() {
     const diaryJson = localStorage.getItem(diaryKey) || '{}';
     const configJson = localStorage.getItem('tb_widget_config') || '{"widgets":[]}';
     await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson, rivalryJson, diaryJson });
+    console.log("[Widget] Data exported successfully");
   } catch (e) {
     console.error("Widget export error:", e);
+  }
+}
+
+async function launchCompanionApp() {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("launch_widget_app");
+    console.log("[Widget] Companion app launched");
+  } catch (e) {
+    console.error("[Widget] Failed to launch companion app:", e);
   }
 }
 
@@ -66,6 +77,15 @@ export default function WidgetManager({ onWidgetChange }: Props) {
   const [addType, setAddType] = useState<WidgetType>("tasks");
   const [addTheme, setAddTheme] = useState<WidgetTheme>("midnight");
   const [addTranslucent, setAddTranslucent] = useState(true);
+  const hasLaunchedCompanion = useRef(false);
+
+  // Auto-launch companion app when widgets exist (only once per session)
+  useEffect(() => {
+    if (isTauri && widgets.some(w => w.enabled) && !hasLaunchedCompanion.current) {
+      hasLaunchedCompanion.current = true;
+      launchCompanionApp();
+    }
+  }, [isTauri, widgets.length]);
 
   function persist(list: WidgetConfig[]) {
     setWidgets(list);
@@ -160,9 +180,18 @@ export default function WidgetManager({ onWidgetChange }: Props) {
         </button>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Floating widgets require the <b>Task Battles Widgets</b> companion app to be <b>running</b>. If it's installed but you don't see widgets, launch it from your Start Menu.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Floating widgets require the <b>Task Battles Widgets</b> companion app to be <b>running</b>.
+        </p>
+        <button
+          onClick={() => launchCompanionApp()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors shrink-0"
+        >
+          <Monitor size={12} />
+          Launch Widget App
+        </button>
+      </div>
 
       {showAddDialog && (
         <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-4">
