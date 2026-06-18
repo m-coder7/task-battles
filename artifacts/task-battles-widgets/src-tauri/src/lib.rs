@@ -339,21 +339,49 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         expected_labels.push(label.clone());
         
         if let Some(window) = app.get_webview_window(&label) {
-            // Reposition existing window to saved position
+            // Only correct position/size if the window has genuinely drifted
+            // from where it should be (e.g. a monitor was disconnected and the
+            // window ended up off-screen). This function runs on every routine
+            // widgets.json refresh (roughly every 10s, whenever the main app
+            // exports data), so unconditionally calling set_position/set_size
+            // here was fighting with OS-level window management — most visibly
+            // when a widget was near a screen edge and Windows' snap animation
+            // was running, which caused jitter and could crash the window.
             if let Some(pos) = positions.get(&id) {
-                // Clamp position to ensure it's visible on screen
                 let (clamped_x, clamped_y) = clamp_to_monitors(
                     pos.x, pos.y, pos.width, pos.height, &monitors
                 );
-                
-                let _ = window.set_position(tauri::Position::Logical(
-                    tauri::LogicalPosition { x: clamped_x, y: clamped_y }
-                ));
-                let _ = window.set_size(tauri::Size::Logical(
-                    tauri::LogicalSize { width: pos.width, height: pos.height }
-                ));
-                println!("[WidgetApp] Repositioned {} to logical ({:.1}, {:.1}) size {:.1}x{:.1}", 
-                    label, clamped_x, clamped_y, pos.width, pos.height);
+
+                if let (Ok(live_pos), Ok(live_size)) = (window.outer_position(), window.inner_size()) {
+                    let scale = monitors.iter()
+                        .find(|&&(mon_x, mon_y, mon_w, mon_h, _)| {
+                            live_pos.x >= mon_x && live_pos.x < mon_x + mon_w as i32 &&
+                            live_pos.y >= mon_y && live_pos.y < mon_y + mon_h as i32
+                        })
+                        .map(|&(_, _, _, _, scale)| scale)
+                        .unwrap_or(1.0);
+
+                    let live_x = physical_to_logical(live_pos.x, scale);
+                    let live_y = physical_to_logical(live_pos.y, scale);
+                    let live_w = physical_to_logical(live_size.width as i32, scale);
+                    let live_h = physical_to_logical(live_size.height as i32, scale);
+
+                    let drifted = (live_x - clamped_x).abs() > 2.0
+                        || (live_y - clamped_y).abs() > 2.0
+                        || (live_w - pos.width).abs() > 2.0
+                        || (live_h - pos.height).abs() > 2.0;
+
+                    if drifted {
+                        let _ = window.set_position(tauri::Position::Logical(
+                            tauri::LogicalPosition { x: clamped_x, y: clamped_y }
+                        ));
+                        let _ = window.set_size(tauri::Size::Logical(
+                            tauri::LogicalSize { width: pos.width, height: pos.height }
+                        ));
+                        println!("[WidgetApp] Corrected drifted position for {} to logical ({:.1}, {:.1}) size {:.1}x{:.1}",
+                            label, clamped_x, clamped_y, pos.width, pos.height);
+                    }
+                }
             }
             continue;
         }
@@ -394,6 +422,7 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
             .skip_taskbar(true)
             .visible(true)
             .resizable(true)
+            .always_on_bottom(true)
             .build()
         {
             Ok(_) => {

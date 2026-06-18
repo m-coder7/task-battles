@@ -236,7 +236,7 @@ function WriteView({ date, entry, allEntries, onPrev, onNext, canGoForward, onSa
         </div>
 
         <textarea
-          className="flex-1 min-h-[240px] w-full resize-none bg-[#faf8f5] dark:bg-[#1a1815] border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary/30 transition-all leading-relaxed font-serif"
+          className="flex-1 min-h-[240px] w-full resize-none bg-[#faf8f5] dark:bg-[#1a1815] ember:bg-[#1f150f] border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-2 focus:ring-primary/30 transition-all leading-relaxed font-serif"
           style={{ backgroundImage: "repeating-linear-gradient(transparent, transparent 31px, rgba(0,0,0,0.03) 31px, rgba(0,0,0,0.03) 32px)" }}
           placeholder={`What happened ${isToday(date) ? "today" : "on this day"}? How did it go?`}
           value={content}
