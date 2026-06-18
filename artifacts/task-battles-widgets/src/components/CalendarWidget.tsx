@@ -59,9 +59,9 @@ export default function CalendarWidget({ theme }: { theme: string }) {
           const hasEvent = eventDates.has(dateStr);
           const isToday = dateStr === todayStr;
           return (
-            <div key={d} className={`relative py-1 rounded-sm text-[10px] ${isToday ? "bg-[#FF9500]/30" : ""}`}>
+          <div key={d} className="relative py-1 rounded-sm text-[10px]" style={isToday ? { backgroundColor: "var(--widget-accent-soft)" } : undefined}>
               <span className={`${isToday ? "widget-accent font-bold" : "widget-text"}`}>{d}</span>
-              {hasEvent && <div className="w-1 h-1 rounded-full bg-[#FF9500] mx-auto mt-0.5" />}
+              {hasEvent && <div className="w-1 h-1 rounded-full mx-auto mt-0.5" style={{ backgroundColor: "var(--widget-accent)" }} />}
             </div>
           );
         })}

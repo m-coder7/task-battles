@@ -43,7 +43,7 @@ export default function RivalryScoreWidget({ theme }: { theme: string }) {
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-[#FF9500]/20 flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: "var(--widget-accent-soft)" }}>
                 <User size={12} className="widget-accent" />
               </div>
               <div>

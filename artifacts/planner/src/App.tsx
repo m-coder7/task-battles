@@ -6,7 +6,7 @@ import {
 import {
   Plus, Calendar, LayoutGrid, CalendarDays, Sun, Flame, Moon,
   Target, Swords, List, Search, Clock, ChevronRight,
-  StickyNote, BookOpen, Settings, LogOut, Monitor,
+  StickyNote, BookOpen, Settings, LogOut,
 } from "lucide-react";
 import MiniCalendar from "@/components/MiniCalendar";
 import MonthView from "@/components/MonthView";
@@ -30,26 +30,16 @@ import AuthScreen from "@/components/AuthScreen";
 type View = "today" | "month" | "week" | "day" | "agenda";
 type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "settings";
 
-type ThemeMode = "system" | "midnight" | "ember";
+type ThemeMode = "light" | "midnight" | "ember";
 
 function useTheme() {
   const [mode, setMode] = useState<ThemeMode>(() => {
     try {
-      const stored = localStorage.getItem("task_battles_theme") as ThemeMode | null;
-      return stored ?? "system";
-    } catch { return "system"; }
+      const stored = localStorage.getItem("task_battles_theme");
+      if (stored === "midnight" || stored === "ember") return stored;
+      return "light";
+    } catch { return "light"; }
   });
-
-  const [systemDark, setSystemDark] = useState(() =>
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  );
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -58,14 +48,12 @@ function useTheme() {
       root.classList.add("dark");
     } else if (mode === "ember") {
       root.classList.add("ember");
-    } else if (systemDark) {
-      root.classList.add("dark");
     }
     try { localStorage.setItem("task_battles_theme", mode); } catch {}
-  }, [mode, systemDark]);
+  }, [mode]);
 
-  const themeIcon = mode === "ember" ? <Flame size={15} /> : mode === "midnight" ? <Moon size={15} /> : <Monitor size={15} />;
-  const themeLabel = mode === "ember" ? "Ember" : mode === "midnight" ? "Midnight" : "System";
+  const themeIcon = mode === "ember" ? <Flame size={15} /> : mode === "midnight" ? <Moon size={15} /> : <Sun size={15} />;
+  const themeLabel = mode === "ember" ? "Ember" : mode === "midnight" ? "Midnight" : "Light";
 
   return { mode, setMode, themeIcon, themeLabel };
 }
@@ -477,7 +465,7 @@ export default function App() {
             </button>
             {themeOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-1 bg-popover border border-border rounded-lg shadow-lg p-1 z-50">
-                {(["system", "midnight", "ember"] as ThemeMode[]).map((m) => (
+                {(["light", "midnight", "ember"] as ThemeMode[]).map((m) => (
                   <button
                     key={m}
                     onClick={() => { setMode(m); setThemeOpen(false); }}
@@ -485,8 +473,8 @@ export default function App() {
                       mode === m ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted"
                     }`}
                   >
-                    {m === "ember" ? <Flame size={13} /> : m === "midnight" ? <Moon size={13} /> : <Monitor size={13} />}
-                    {m === "ember" ? "Ember" : m === "midnight" ? "Midnight" : "System"}
+                    {m === "ember" ? <Flame size={13} /> : m === "midnight" ? <Moon size={13} /> : <Sun size={13} />}
+                    {m === "ember" ? "Ember" : m === "midnight" ? "Midnight" : "Light"}
                   </button>
                 ))}
               </div>

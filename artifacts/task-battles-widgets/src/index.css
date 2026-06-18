@@ -21,7 +21,8 @@ body {
 .theme-midnight {
   color: #ffffff;
   --widget-text: #ffffff;
-  --widget-accent: #FF9500;
+  --widget-accent: #4D9FFF;
+  --widget-accent-soft: rgba(77, 159, 255, 0.25);
   --widget-muted: rgba(255, 255, 255, 0.5);
   --widget-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.5);
   --widget-accent-shadow: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
@@ -44,6 +45,7 @@ body {
   color: #FFB74D;
   --widget-text: #FFB74D;
   --widget-accent: #FF8C00;
+  --widget-accent-soft: rgba(255, 140, 0, 0.3);
   --widget-muted: rgba(255, 183, 77, 0.5);
   --widget-shadow: 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 6px rgba(80, 40, 0, 0.4);
   --widget-accent-shadow: drop-shadow(0 1px 2px rgba(80, 40, 0, 0.6));
@@ -66,7 +68,8 @@ body {
   color: #1a1a1a;
   --widget-text: #1a1a1a;
   --widget-accent: #E06B00;
-  --widget-muted: rgba(0, 0, 0, 0.4);
+  --widget-accent-soft: rgba(224, 107, 0, 0.18);
+  --widget-muted: rgba(20, 20, 20, 0.7);
   --widget-shadow: 0 1px 2px rgba(255, 255, 255, 0.7), 0 0 6px rgba(255, 255, 255, 0.3);
   --widget-accent-shadow: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.6));
 }
@@ -83,7 +86,5 @@ body {
   text-shadow: var(--widget-shadow);
 }
 
-/* SVG progress circles need per-theme stroke color */
-.theme-midnight .progress-ring { stroke: #FF9500; }
-.theme-ember .progress-ring { stroke: #FF8C00; }
-.theme-light .progress-ring { stroke: #E06B00; }
+/* SVG progress circles use the same per-theme accent */
+.progress-ring { stroke: var(--widget-accent); }
