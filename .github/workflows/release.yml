@@ -100,6 +100,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: ${{ matrix.app_dir }}
+          tauriScript: pnpm tauri
           target: ${{ matrix.rust_target }}
           args: --target ${{ matrix.rust_target }}
 
