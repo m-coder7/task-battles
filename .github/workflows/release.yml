@@ -31,11 +31,6 @@ jobs:
             artifact_suffix: macos-arm64
           - app: planner
             app_dir: artifacts/planner
-            rust_target: x86_64-apple-darwin
-            os: macos-13
-            artifact_suffix: macos-intel
-          - app: planner
-            app_dir: artifacts/planner
             rust_target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_suffix: linux
@@ -51,11 +46,6 @@ jobs:
             rust_target: aarch64-apple-darwin
             os: macos-latest
             artifact_suffix: macos-arm64
-          - app: widgets
-            app_dir: artifacts/task-battles-widgets
-            rust_target: x86_64-apple-darwin
-            os: macos-13
-            artifact_suffix: macos-intel
           - app: widgets
             app_dir: artifacts/task-battles-widgets
             rust_target: x86_64-unknown-linux-gnu
