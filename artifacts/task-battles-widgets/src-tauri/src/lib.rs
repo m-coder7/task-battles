@@ -5,7 +5,6 @@ use tauri_plugin_opener::OpenerExt;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Duration;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +75,26 @@ fn save_positions(map: &HashMap<String, WindowPos>) {
     let _ = std::fs::write(positions_path(), serde_json::to_string(map).unwrap_or_default());
 }
 
+// ─── Logging ────────────────────────────────────────────────────────────────
+
+fn log(msg: &str) {
+    let path = state_path().join("widget-app.log");
+    let _ = std::fs::create_dir_all(state_path());
+    let _ = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        writeln!(f, "[{}] {}", ts, msg)?;
+        Ok(())
+    })();
+}
+
 // ─── Monitor and coordinate helpers ──────────────────────────────────────────
 
 /// Get work areas and scale factors for all available monitors
@@ -107,11 +126,6 @@ fn get_monitor_work_areas(app: &tauri::AppHandle) -> Vec<(i32, i32, u32, u32, f6
 /// Convert physical pixels to logical pixels
 fn physical_to_logical(physical: i32, scale: f64) -> f64 {
     physical as f64 / scale
-}
-
-/// Convert logical pixels to physical pixels
-fn logical_to_physical(logical: f64, scale: f64) -> i32 {
-    (logical * scale).round() as i32
 }
 
 /// Clamp a window position to ensure it's visible on at least one monitor
@@ -173,7 +187,7 @@ fn read_shared_data() -> Result<serde_json::Value, String> {
         .join("widgets.json");
     
     if !path.exists() {
-        println!("[WidgetApp] widgets.json not found at {:?}", path);
+        log(&format!("widgets.json not found at {:?}", path));
         return Ok(serde_json::json!({ "goals": [], "events": [], "config": { "widgets": [] } }));
     }
     
@@ -183,8 +197,8 @@ fn read_shared_data() -> Result<serde_json::Value, String> {
     let data: serde_json::Value = serde_json::from_str(&contents)
         .map_err(|e| format!("Failed to parse shared data: {}", e))?;
     
-    println!("[WidgetApp] Read widgets.json: {} widgets", 
-        data.get("config").and_then(|c| c.get("widgets")).and_then(|w| w.as_array()).map(|a| a.len()).unwrap_or(0));
+    log(&format!("Read widgets.json: {} widgets", 
+        data.get("config").and_then(|c| c.get("widgets")).and_then(|w| w.as_array()).map(|a| a.len()).unwrap_or(0)));
     
     Ok(data)
 }
@@ -277,8 +291,8 @@ fn save_current_positions(app: &tauri::AppHandle, state: &tauri::State<WidgetSta
                 height: logical_h,
             });
             
-            println!("[WidgetApp] Saved {} position: logical ({:.1}, {:.1}) size {:.1}x{:.1} (scale: {:.2})", 
-                label, logical_x, logical_y, logical_w, logical_h, scale);
+            log(&format!("Saved {} position: logical ({:.1}, {:.1}) size {:.1}x{:.1} (scale: {:.2})", 
+                label, logical_x, logical_y, logical_w, logical_h, scale));
         }
     }
     save_positions(&positions);
@@ -291,15 +305,15 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     let config = data.get("config").cloned().unwrap_or(serde_json::json!({ "widgets": [] }));
     let widgets = config.get("widgets").and_then(|w| w.as_array()).cloned().unwrap_or_default();
     
-    println!("[WidgetApp] spawn_or_update_widgets: {} widgets in config", widgets.len());
+    log(&format!("spawn_or_update_widgets: {} widgets in config", widgets.len()));
     
     if widgets.is_empty() {
-        println!("[WidgetApp] No widgets configured, skipping spawn");
+        log("No widgets configured, skipping spawn");
     }
 
     // Get monitor information for coordinate handling
     let monitors = get_monitor_work_areas(app);
-    println!("[WidgetApp] Found {} monitor(s)", monitors.len());
+    log(&format!("Found {} monitor(s)", monitors.len()));
 
     // Save current positions before potentially closing windows
     save_current_positions(app, state);
@@ -332,7 +346,7 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         let label = format!("widget-{}", id);
         
         if user_closed.contains(&id) {
-            println!("[WidgetApp] Skipping {} (user closed)", label);
+            log(&format!("Skipping {} (user closed)", label));
             continue;
         }
         
@@ -378,8 +392,8 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
                         let _ = window.set_size(tauri::Size::Logical(
                             tauri::LogicalSize { width: pos.width, height: pos.height }
                         ));
-                        println!("[WidgetApp] Corrected drifted position for {} to logical ({:.1}, {:.1}) size {:.1}x{:.1}",
-                            label, clamped_x, clamped_y, pos.width, pos.height);
+                        log(&format!("Corrected drifted position for {} to logical ({:.1}, {:.1}) size {:.1}x{:.1}",
+                            label, clamped_x, clamped_y, pos.width, pos.height));
                     }
                 }
             }
@@ -409,8 +423,8 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
         
         let url = format!("/?widget={}&theme={}&translucent={}", widget_type, theme, translucent);
         
-        println!("[WidgetApp] Creating window {} at logical ({:.1}, {:.1}) size {:.1}x{:.1}", 
-            label, clamped_x, clamped_y, width, height);
+        log(&format!("Creating window {} at logical ({:.1}, {:.1}) size {:.1}x{:.1}", 
+            label, clamped_x, clamped_y, width, height));
         
         match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
             .title(&id)
@@ -426,11 +440,11 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
             .build()
         {
             Ok(_) => {
-                println!("[WidgetApp] Successfully created {}", label);
+                log(&format!("Successfully created {}", label));
                 spawned_count += 1;
             }
             Err(e) => {
-                eprintln!("[WidgetApp] FAILED to create {}: {}", label, e);
+                log(&format!("FAILED to create {}: {}", label, e));
             }
         }
     }
@@ -438,7 +452,7 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     // Close windows no longer in config
     for (label, window) in app.webview_windows() {
         if label.starts_with("widget-") && !expected_labels.contains(&label) {
-            println!("[WidgetApp] Closing {} (not in config)", label);
+            log(&format!("Closing {} (not in config)", label));
             let _ = window.close();
             let id = label.strip_prefix("widget-").unwrap_or(&label).to_string();
             user_closed.remove(&id);
@@ -446,13 +460,14 @@ fn spawn_or_update_widgets(app: &tauri::AppHandle, state: &tauri::State<WidgetSt
     }
     
     save_user_closed(&user_closed);
-    println!("[WidgetApp] Spawn cycle complete. Spawned {} windows.", spawned_count);
+    log(&format!("Spawn cycle complete. Spawned {} windows.", spawned_count));
     Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    println!("[WidgetApp] Starting Task Battles Widgets companion app");
+    let t0 = std::time::Instant::now();
+    log("Starting Task Battles Widgets companion app");
     
     tauri::Builder::default()
         .manage(WidgetState::new())
@@ -468,8 +483,8 @@ pub fn run() {
             open_main_app,
             write_action
         ])
-        .setup(|app| {
-            println!("[WidgetApp] Setup phase");
+        .setup(move |app| {
+            log(&format!("Setup phase (T+{}ms)", t0.elapsed().as_millis()));
             
             // Create tray icon to keep app alive
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -480,7 +495,7 @@ pub fn run() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
-                        println!("[WidgetApp] Quit requested from tray");
+                        log("Quit requested from tray");
                         let state: tauri::State<WidgetState> = app.state::<WidgetState>();
                         save_current_positions(app, &state);
                         app.exit(0);
@@ -489,15 +504,15 @@ pub fn run() {
                 })
                 .build(app)?;
             
-            println!("[WidgetApp] Tray icon created");
+            log(&format!("Tray icon created (T+{}ms)", t0.elapsed().as_millis()));
             
             // Enable autostart (cross-platform)
             {
                 let app_handle = app.app_handle().clone();
                 use tauri_plugin_autostart::ManagerExt;
                 match app_handle.autolaunch().enable() {
-                    Ok(_) => println!("[WidgetApp] Autostart enabled"),
-                    Err(e) => eprintln!("[WidgetApp] Failed to enable autostart: {}", e),
+                    Ok(_) => log("Autostart enabled"),
+                    Err(e) => log(&format!("Failed to enable autostart: {}", e)),
                 }
             }
             
@@ -511,18 +526,18 @@ pub fn run() {
                 .visible(false)
                 .build()
             {
-                Ok(_) => println!("[WidgetApp] Keeper window created"),
-                Err(e) => eprintln!("[WidgetApp] Keeper window failed: {}", e),
+                Ok(_) => log(&format!("Keeper window created (T+{}ms)", t0.elapsed().as_millis())),
+                Err(e) => log(&format!("Keeper window failed: {}", e)),
             }
 
             let app_handle = app.app_handle().clone();
             let state: tauri::State<WidgetState> = app.state::<WidgetState>();
             
             // Initial spawn - immediate
-            println!("[WidgetApp] Initial spawn...");
+            log(&format!("Initial spawn... (T+{}ms)", t0.elapsed().as_millis()));
             match spawn_or_update_widgets(&app_handle, &state) {
-                Ok(_) => println!("[WidgetApp] Initial spawn complete"),
-                Err(e) => eprintln!("[WidgetApp] Initial spawn failed: {}", e),
+                Ok(_) => log(&format!("Initial spawn complete (T+{}ms)", t0.elapsed().as_millis())),
+                Err(e) => log(&format!("Initial spawn failed: {}", e)),
             }
             
             // Watch for config changes using file system notifications
@@ -536,13 +551,17 @@ pub fn run() {
                 let mut watcher = match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
                     if let Ok(event) = res {
                         if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                            let _ = tx.send(());
+                            if event.paths.iter().any(|p| {
+                                p.file_name().map_or(false, |f| f == "widgets.json")
+                            }) {
+                                let _ = tx.send(());
+                            }
                         }
                     }
                 }) {
                     Ok(w) => w,
                     Err(e) => {
-                        eprintln!("[WidgetApp] Failed to create file watcher: {}", e);
+                        log(&format!("Failed to create file watcher: {}", e));
                         return;
                     }
                 };
@@ -555,31 +574,34 @@ pub fn run() {
                 let watch_dir = widgets_path.parent().unwrap();
                 
                 if let Err(e) = watcher.watch(watch_dir, RecursiveMode::NonRecursive) {
-                    eprintln!("[WidgetApp] Failed to watch directory {:?}: {}", watch_dir, e);
+                    log(&format!("Failed to watch directory {:?}: {}", watch_dir, e));
                     return;
                 }
                 
-                println!("[WidgetApp] Watching {:?} for changes", watch_dir);
+                log(&format!("Watching {:?} for changes", watch_dir));
                 
-                // Debounce: wait 100ms after last change before spawning
-                let mut last_change = std::time::Instant::now();
+                // Debounce: fire once after 100ms of quiet
+                let mut last_change = std::time::Instant::now() - Duration::from_secs(1);
+                let mut pending = false;
                 loop {
-                    match rx.recv_timeout(Duration::from_millis(100)) {
+                    match rx.recv_timeout(Duration::from_millis(50)) {
                         Ok(_) => {
                             last_change = std::time::Instant::now();
+                            pending = true;
                         }
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                            if last_change.elapsed() >= Duration::from_millis(100) && last_change.elapsed() < Duration::from_millis(200) {
-                                println!("[WidgetApp] Config changed, spawning widgets...");
+                            if pending && last_change.elapsed() >= Duration::from_millis(100) {
+                                pending = false;
+                                log("Config changed, spawning widgets...");
                                 let state: tauri::State<WidgetState> = app_handle.state::<WidgetState>();
                                 match spawn_or_update_widgets(&app_handle, &state) {
-                                    Ok(_) => println!("[WidgetApp] Spawn complete"),
-                                    Err(e) => eprintln!("[WidgetApp] Spawn failed: {}", e),
+                                    Ok(_) => log("Spawn complete"),
+                                    Err(e) => log(&format!("Spawn failed: {}", e)),
                                 }
                             }
                         }
                         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                            eprintln!("[WidgetApp] File watcher disconnected");
+                            log("File watcher disconnected");
                             break;
                         }
                     }

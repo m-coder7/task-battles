@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+env:
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Planner app
+          - app: planner
+            app_dir: artifacts/planner
+            rust_target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_suffix: windows
+          - app: planner
+            app_dir: artifacts/planner
+            rust_target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_suffix: macos-arm64
+          - app: planner
+            app_dir: artifacts/planner
+            rust_target: x86_64-apple-darwin
+            os: macos-13
+            artifact_suffix: macos-intel
+          - app: planner
+            app_dir: artifacts/planner
+            rust_target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_suffix: linux
+
+          # Widgets companion app
+          - app: widgets
+            app_dir: artifacts/task-battles-widgets
+            rust_target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_suffix: windows
+          - app: widgets
+            app_dir: artifacts/task-battles-widgets
+            rust_target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_suffix: macos-arm64
+          - app: widgets
+            app_dir: artifacts/task-battles-widgets
+            rust_target: x86_64-apple-darwin
+            os: macos-13
+            artifact_suffix: macos-intel
+          - app: widgets
+            app_dir: artifacts/task-battles-widgets
+            rust_target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_suffix: linux
+
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.app }} (${{ matrix.artifact_suffix }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Linux dependencies (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ${{ matrix.app_dir }}
+          target: ${{ matrix.rust_target }}
+          args: --target ${{ matrix.rust_target }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-${{ matrix.artifact_suffix }}
+          path: |
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.msi
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.exe
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.dmg
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.AppImage
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.deb
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app.tar.gz
+            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app.tar.sig
+          if-no-files-found: warn
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create GitHub Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.app.tar.gz
+            artifacts/**/*.app.tar.sig
+          make_latest: true
