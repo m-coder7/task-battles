@@ -18,7 +18,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Planner app
           - app: planner
             app_dir: artifacts/planner
             rust_target: x86_64-pc-windows-msvc
@@ -34,8 +33,6 @@ jobs:
             rust_target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_suffix: linux
-
-          # Widgets companion app
           - app: widgets
             app_dir: artifacts/task-battles-widgets
             rust_target: x86_64-pc-windows-msvc
@@ -110,44 +107,68 @@ jobs:
         with:
           name: ${{ matrix.app }}-${{ matrix.artifact_suffix }}
           path: |
-            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.msi
             ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.exe
             ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.dmg
-            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app
             ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.AppImage
             ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.deb
-            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app.tar.gz
-            ${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app.tar.sig
           if-no-files-found: warn
 
-  release:
+  package:
     needs: build
+    runs-on: ubuntu-latest
+    name: Package combined zips
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            artifact_names: "planner-windows,widgets-windows"
+            zip_name: TaskBattles-${{ github.ref_name }}-windows.zip
+          - platform: macos
+            artifact_names: "planner-macos-arm64,widgets-macos-arm64"
+            zip_name: TaskBattles-${{ github.ref_name }}-macos.zip
+          - platform: linux
+            artifact_names: "planner-linux,widgets-linux"
+            zip_name: TaskBattles-${{ github.ref_name }}-linux.zip
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: staged
+          merge-multiple: true
+          pattern: ${{ matrix.artifact_names }}
+
+      - name: List downloaded files
+        run: find staged -type f
+
+      - name: Create combined zip
+        run: |
+          cd staged
+          zip -r "../${{ matrix.zip_name }}" .
+
+      - name: Upload combined zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: ${{ matrix.zip_name }}
+
+  release:
+    needs: package
     runs-on: ubuntu-latest
     name: Create GitHub Release
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
+      - name: Download combined zips
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: List downloaded artifacts
-        run: find artifacts -type f | head -50
+          path: zips
+          pattern: release-*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: |
-            artifacts/**/*.msi
-            artifacts/**/*.exe
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-            artifacts/**/*.app.tar.gz
-            artifacts/**/*.app.tar.sig
+          files: zips/**/*.zip
           make_latest: true
