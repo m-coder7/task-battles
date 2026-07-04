@@ -3,6 +3,19 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
+// Remove crossorigin attributes from generated HTML.
+// Tauri serves assets from tauri://localhost/ which doesn't send CORS headers,
+// so the crossorigin attribute causes script loading to fail silently.
+function stripCrossorigin() {
+  return {
+    name: "strip-crossorigin",
+    enforce: "post" as const,
+    transformIndexHtml(html: string) {
+      return html.replace(/(<(?:script|link)[^>]*?) crossorigin/g, "$1");
+    },
+  };
+}
+
 // Load root .env file so PORT and BASE_PATH can be defined there
 const envDir = path.resolve(import.meta.dirname, "..", "..");
 const loadedEnv = loadEnv("development", envDir, "");
@@ -42,6 +55,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    stripCrossorigin(),
   ],
   resolve: {
     alias: {
@@ -54,6 +68,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    modulePreload: false,
   },
   server: {
     port,
