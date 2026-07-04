@@ -123,13 +123,13 @@ jobs:
       matrix:
         include:
           - platform: windows
-            artifact_names: "planner-windows,widgets-windows"
+            artifact_pattern: "*-windows"
             zip_name: TaskBattles-${{ github.ref_name }}-windows.zip
           - platform: macos
-            artifact_names: "planner-macos-arm64,widgets-macos-arm64"
+            artifact_pattern: "*-macos-arm64"
             zip_name: TaskBattles-${{ github.ref_name }}-macos.zip
           - platform: linux
-            artifact_names: "planner-linux,widgets-linux"
+            artifact_pattern: "*-linux"
             zip_name: TaskBattles-${{ github.ref_name }}-linux.zip
 
     steps:
@@ -138,7 +138,7 @@ jobs:
         with:
           path: staged
           merge-multiple: true
-          pattern: ${{ matrix.artifact_names }}
+          pattern: ${{ matrix.artifact_pattern }}
 
       - name: List downloaded files
         run: find staged -type f
