@@ -2,28 +2,12 @@
 
 A to-do app that lets you compete with your friends on who finishes more tasks. Plan your day, track goals, and battle it out on a shared leaderboard — with a floating widgets companion that keeps your progress visible on your desktop at all times.
 
-![Task Battles — Today view](docs/screenshots/calendar_ember.png)
-
-## Themes
-
-Ember, Midnight, and Light — pick whichever fits your desktop.
-
-![Theme comparison](docs/screenshots/themes.png)
-
 ## Features
 
 - **Task planning** — organize goals, events, and daily tasks in one place
 - **Rivalry mode** — compete with friends on task completion
 - **Floating widgets** — an always-on-top, transparent companion app that sits in your system tray and shows live progress without needing the main app open
 - **Cross-platform** — native desktop builds for Windows, macOS, and Linux
-
-<table>
-<tr>
-<td width="33%"><img src="docs/screenshots/goals.png" alt="Goals"/><br/><sub>Goals</sub></td>
-<td width="33%"><img src="docs/screenshots/rivalry.png" alt="Rivalry"/><br/><sub>Rivalry — challenge friends by invite code</sub></td>
-<td width="33%"><img src="docs/screenshots/notes.png" alt="Notes"/><br/><sub>Notes</sub></td>
-</tr>
-</table>
 
 ## Screenshots
 
