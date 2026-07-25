@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { format, isToday, isPast, parseISO, startOfDay } from "date-fns";
 import {
   Plus, Bell, BellOff, CheckCircle2, Circle, Target,
-  ChevronDown, ChevronRight, TriangleAlert, RefreshCw,
+  ChevronDown, ChevronRight, RefreshCw,
 } from "lucide-react";
 import {
   Goal, GoalCategory, CATEGORY_META, REPEAT_META,
@@ -125,14 +125,13 @@ interface SectionProps {
   subtitle?: string;
   goals: Goal[];
   icon?: React.ReactNode;
-  danger?: boolean;
   defaultOpen?: boolean;
   onToggle: (id: string) => void;
   onEdit: (goal: Goal) => void;
   onTestNotification: (goal: Goal) => void;
 }
 
-function Section({ title, subtitle, goals, icon, danger, defaultOpen = true, onToggle, onEdit, onTestNotification }: SectionProps) {
+function Section({ title, subtitle, goals, icon, defaultOpen = true, onToggle, onEdit, onTestNotification }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   if (goals.length === 0) return null;
 
@@ -143,7 +142,7 @@ function Section({ title, subtitle, goals, icon, danger, defaultOpen = true, onT
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 w-full text-xs font-semibold uppercase tracking-wide mb-2 ${danger ? "text-red-600" : "text-muted-foreground"}`}
+        className="flex items-center gap-1.5 w-full text-xs font-semibold uppercase tracking-wide mb-2 text-muted-foreground"
       >
         {icon}
         {title}
@@ -273,8 +272,7 @@ export default function GoalsPanel() {
         <Section
           title="Overdue"
           goals={grouped.overdue}
-          icon={<TriangleAlert size={12} />}
-          danger
+          defaultOpen={false}
           onToggle={toggleComplete}
           onEdit={openEdit}
           onTestNotification={sendNotification}
