@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
-import { format, parseISO, isBefore, startOfDay, getDay } from "date-fns";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { format, parseISO, isBefore, startOfDay, getDay, differenceInCalendarDays } from "date-fns";
+import { toast } from "sonner";
 import { useAuth, getStorageKey } from "@/hooks/useAuth";
 
 export type GoalCategory = "must-do" | "should-do" | "nice-to-have";
@@ -21,6 +22,7 @@ export interface Goal {
 }
 
 const TODAY = () => format(new Date(), "yyyy-MM-dd");
+const OVERDUE_DELETE_AFTER_DAYS = 3;
 
 function loadGoals(key: string): Goal[] {
   try {
@@ -31,6 +33,37 @@ function loadGoals(key: string): Goal[] {
 
 function saveGoals(key: string, goals: Goal[]) {
   localStorage.setItem(key, JSON.stringify(goals));
+}
+
+/** Non-recurring, incomplete, due date before today. */
+export function isOverdueGoal(goal: Goal, today = new Date()): boolean {
+  if (goal.completed) return false;
+  if ((goal.repeat ?? "none") !== "none") return false;
+  try {
+    return isBefore(startOfDay(parseISO(goal.date)), startOfDay(today));
+  } catch {
+    return false;
+  }
+}
+
+/** Overdue for more than 3 calendar days → eligible for auto-delete. */
+export function isExpiredOverdueGoal(goal: Goal, today = new Date()): boolean {
+  if (!isOverdueGoal(goal, today)) return false;
+  try {
+    return differenceInCalendarDays(startOfDay(today), startOfDay(parseISO(goal.date))) > OVERDUE_DELETE_AFTER_DAYS;
+  } catch {
+    return false;
+  }
+}
+
+function purgeExpiredOverdue(goals: Goal[]): { kept: Goal[]; removed: number } {
+  const kept: Goal[] = [];
+  let removed = 0;
+  for (const g of goals) {
+    if (isExpiredOverdueGoal(g)) removed += 1;
+    else kept.push(g);
+  }
+  return { kept, removed };
 }
 
 export const CATEGORY_META: Record<GoalCategory, { label: string; color: string; bg: string; text: string; border: string }> = {
@@ -74,9 +107,32 @@ export function isActiveToday(goal: Goal): boolean {
 export function useGoals() {
   const { user } = useAuth();
   const storageKey = getStorageKey("planner_goals", user?.id);
-  const [goals, setGoals] = useState<Goal[]>(() => loadGoals(storageKey));
+  const purgedKeyRef = useRef<string | null>(null);
+  const [goals, setGoals] = useState<Goal[]>(() => {
+    const { kept } = purgeExpiredOverdue(loadGoals(storageKey));
+    return kept;
+  });
 
-  useEffect(() => { setGoals(loadGoals(storageKey)); }, [storageKey]);
+  useEffect(() => {
+    const loaded = loadGoals(storageKey);
+    const { kept, removed } = purgeExpiredOverdue(loaded);
+    setGoals(kept);
+    if (removed > 0) {
+      saveGoals(storageKey, kept);
+      if (purgedKeyRef.current !== storageKey) {
+        purgedKeyRef.current = storageKey;
+        toast.message(
+          removed === 1
+            ? "1 overdue goal was removed"
+            : `${removed} overdue goals were removed`,
+          { description: "Goals overdue for more than 3 days are cleaned up automatically." },
+        );
+      }
+    } else {
+      purgedKeyRef.current = storageKey;
+    }
+  }, [storageKey]);
+
   useEffect(() => { saveGoals(storageKey, goals); }, [goals, storageKey]);
 
   const addGoal = useCallback((goal: Omit<Goal, "id" | "completed" | "completedDates" | "lastNotifiedDate">) => {

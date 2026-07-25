@@ -148,8 +148,8 @@ export default function WidgetsPanel({ events, goals }: Props) {
         {/* Overdue Widget */}
         <div className="rounded-xl border border-border bg-card p-5 min-h-[200px]">
           <div className="flex items-center gap-2 mb-3">
-            <Flame size={14} className="text-red-500" />
-            <span className="text-xs font-semibold text-red-500 uppercase tracking-wide">Overdue</span>
+            <Circle size={14} className="text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Overdue</span>
           </div>
           {overdueGoals.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">No overdue goals</p>
@@ -157,9 +157,9 @@ export default function WidgetsPanel({ events, goals }: Props) {
             <div className="space-y-2">
               {overdueGoals.slice(0, 6).map((g) => (
                 <div key={g.id} className="flex items-center gap-2 text-sm">
-                  <Circle size={14} className="text-red-500 shrink-0" />
-                  <span className="text-foreground truncate">{g.title}</span>
-                  <span className="text-xs text-muted-foreground shrink-0 ml-auto">
+                  <Circle size={14} className="text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground truncate">{g.title}</span>
+                  <span className="text-xs text-muted-foreground/70 shrink-0 ml-auto">
                     {format(parseISO(g.date), "MMM d")}
                   </span>
                 </div>

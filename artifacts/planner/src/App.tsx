@@ -26,6 +26,7 @@ import { useGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import AuthScreen from "@/components/AuthScreen";
+import { Toaster } from "sonner";
 
 type View = "today" | "month" | "week" | "day" | "agenda";
 type Section = "calendar" | "goals" | "rivalry" | "notes" | "diary" | "settings";
@@ -383,7 +384,7 @@ export default function App() {
                 {icon}
                 {label}
                 {badge ? (
-                  <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  <span className="ml-auto bg-muted text-muted-foreground text-[10px] font-semibold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                     {badge}
                   </span>
                 ) : null}
@@ -649,6 +650,7 @@ export default function App() {
           setSection("calendar");
         }}
       />
+      <Toaster richColors position="bottom-right" />
     </div>
   );
 }
