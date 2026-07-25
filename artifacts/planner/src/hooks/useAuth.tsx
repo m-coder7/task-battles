@@ -1,26 +1,41 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
+import { humanizeAuthError } from "@/lib/authErrors";
+
+const DEFAULT_REDIRECT = "taskbattles://auth/callback";
+const REDIRECT_TO =
+  (import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined)?.trim() ||
+  DEFAULT_REDIRECT;
 
 interface AuthState {
   user: User | null;
   loading: boolean;
+  recoveryMode: boolean;
   signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation?: boolean; autoSignedIn?: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
+  clearRecoveryMode: () => void;
 }
 
 const AuthContext = createContext<AuthState>({
   user: null,
   loading: true,
+  recoveryMode: false,
   signUp: async () => ({ error: null }),
   signIn: async () => ({ error: null }),
   signOut: async () => {},
+  resetPassword: async () => ({ error: null }),
+  updatePassword: async () => ({ error: null }),
+  clearRecoveryMode: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -28,8 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        setRecoveryMode(true);
+      }
+      if (event === "SIGNED_OUT") {
+        setRecoveryMode(false);
+      }
     });
 
     return () => {
@@ -41,26 +62,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: "taskbattles://auth/callback" },
+      options: { emailRedirectTo: REDIRECT_TO },
     });
 
-    if (error) {
-      return { error };
-    }
+    if (error) return { error };
 
-    // If no session, either new user awaiting confirmation or existing user
     if (!data.session && data.user) {
-      // Try to sign in to see if account already exists
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (!signInError) {
-        // Account already existed and password matched — signed in automatically
         return { error: null, needsConfirmation: false, autoSignedIn: true };
       }
       if (signInError.message.includes("Email not confirmed")) {
-        return { error: new Error("This email is already registered but not confirmed. Please check your inbox for the verification link."), needsConfirmation: true };
+        return {
+          error: new Error("This email is already registered but not confirmed. Please check your inbox for the verification link."),
+          needsConfirmation: true,
+        };
       }
       if (signInError.message.includes("Invalid login")) {
-        return { error: new Error("An account with this email already exists. Please sign in with your existing password."), needsConfirmation: false };
+        return {
+          error: new Error("An account with this email already exists. Please sign in with your existing password."),
+          needsConfirmation: false,
+        };
       }
       return { error: null, needsConfirmation: true };
     }
@@ -70,16 +92,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    if (error) return { error: new Error(humanizeAuthError(error, "signin")) };
+    return { error: null };
   }, []);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setRecoveryMode(false);
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: REDIRECT_TO,
+    });
+    if (error) return { error: new Error(humanizeAuthError(error, "reset")) };
+    return { error: null };
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { error: new Error(humanizeAuthError(error, "update")) };
+    setRecoveryMode(false);
+    return { error: null };
+  }, []);
+
+  const clearRecoveryMode = useCallback(() => setRecoveryMode(false), []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        recoveryMode,
+        signUp,
+        signIn,
+        signOut,
+        resetPassword,
+        updatePassword,
+        clearRecoveryMode,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
