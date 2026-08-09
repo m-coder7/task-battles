@@ -3,39 +3,34 @@ import { supabase } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import { humanizeAuthError } from "@/lib/authErrors";
 
-const DEFAULT_REDIRECT = "taskbattles://auth/callback";
-const REDIRECT_TO =
+const DEFAULT_AUTH_REDIRECT = "taskbattles://auth/callback";
+const AUTH_REDIRECT_TO =
   (import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined)?.trim() ||
-  DEFAULT_REDIRECT;
+  DEFAULT_AUTH_REDIRECT;
 
 interface AuthState {
   user: User | null;
   loading: boolean;
-  recoveryMode: boolean;
   signUp: (email: string, password: string) => Promise<{ error: Error | null; needsConfirmation?: boolean; autoSignedIn?: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
-  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
-  clearRecoveryMode: () => void;
+  completePasswordReset: (email: string, token: string, newPassword: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthState>({
   user: null,
   loading: true,
-  recoveryMode: false,
   signUp: async () => ({ error: null }),
   signIn: async () => ({ error: null }),
   signOut: async () => {},
   resetPassword: async () => ({ error: null }),
-  updatePassword: async () => ({ error: null }),
-  clearRecoveryMode: () => {},
+  completePasswordReset: async () => ({ error: null }),
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -43,14 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (event === "PASSWORD_RECOVERY") {
-        setRecoveryMode(true);
-      }
-      if (event === "SIGNED_OUT") {
-        setRecoveryMode(false);
-      }
     });
 
     return () => {
@@ -62,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: REDIRECT_TO },
+      options: { emailRedirectTo: AUTH_REDIRECT_TO },
     });
 
     if (error) return { error };
@@ -99,38 +88,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
-    setRecoveryMode(false);
   }, []);
 
   const resetPassword = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: REDIRECT_TO,
-    });
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) return { error: new Error(humanizeAuthError(error, "reset")) };
     return { error: null };
   }, []);
 
-  const updatePassword = useCallback(async (newPassword: string) => {
+  const completePasswordReset = useCallback(async (email: string, token: string, newPassword: string) => {
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "recovery",
+    });
+    if (verifyError) {
+      return { error: new Error(humanizeAuthError(verifyError, "update")) };
+    }
+
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) return { error: new Error(humanizeAuthError(error, "update")) };
-    setRecoveryMode(false);
     return { error: null };
   }, []);
-
-  const clearRecoveryMode = useCallback(() => setRecoveryMode(false), []);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
-        recoveryMode,
         signUp,
         signIn,
         signOut,
         resetPassword,
-        updatePassword,
-        clearRecoveryMode,
+        completePasswordReset,
       }}
     >
       {children}
