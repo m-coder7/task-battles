@@ -1,42 +1,66 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Mail, Lock, LogIn, UserPlus, Inbox, ArrowLeft, KeyRound, CheckCircle2 } from "lucide-react";
-import { humanizeAuthError } from "@/lib/authErrors";
 
 type Mode = "signin" | "signup" | "forgot";
 
 export default function AuthScreen() {
-  const { signUp, signIn, resetPassword, updatePassword, recoveryMode, user, clearRecoveryMode } = useAuth();
+  const { signUp, signIn, resetPassword, completePasswordReset } = useAuth();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
-  const [resetLinkSent, setResetLinkSent] = useState(false);
+  const [resetCodeSent, setResetCodeSent] = useState(false);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
 
   function switchMode(next: Mode) {
     setMode(next);
     setError(null);
-    setInfo(null);
+    setResetCodeSent(false);
+    setResetCode("");
+    setPassword("");
+    setConfirmPassword("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setInfo(null);
     setLoading(true);
 
     try {
       if (mode === "forgot") {
-        const result = await resetPassword(email);
+        if (!resetCodeSent) {
+          const result = await resetPassword(email);
+          if (result.error) {
+            setError(result.error.message);
+          } else {
+            setResetCodeSent(true);
+          }
+          return;
+        }
+
+        if (!/^\d{6}$/.test(resetCode)) {
+          setError("Enter the 6-digit code from your email.");
+          return;
+        }
+        if (password.length < 6) {
+          setError("Password must be at least 6 characters.");
+          return;
+        }
+        if (password !== confirmPassword) {
+          setError("Passwords do not match.");
+          return;
+        }
+
+        const result = await completePasswordReset(email, resetCode, password);
         if (result.error) {
           setError(result.error.message);
         } else {
-          setResetLinkSent(true);
+          setPasswordUpdated(true);
         }
         return;
       }
@@ -55,34 +79,6 @@ export default function AuthScreen() {
     }
   }
 
-  async function handleUpdatePassword(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-    if (!user) {
-      setError(humanizeAuthError(new Error("auth_session_missing"), "update"));
-      return;
-    }
-
-    setLoading(true);
-    const result = await updatePassword(password);
-    setLoading(false);
-
-    if (result.error) {
-      setError(result.error.message);
-    } else {
-      setPasswordUpdated(true);
-    }
-  }
-
   if (passwordUpdated) {
     return (
       <Shell>
@@ -96,67 +92,6 @@ export default function AuthScreen() {
           <p className="text-sm text-muted-foreground mb-6">
             Your password has been changed. You're now signed in.
           </p>
-        </div>
-      </Shell>
-    );
-  }
-
-  if (recoveryMode) {
-    return (
-      <Shell>
-        <div className="flex items-center gap-2 mb-6 justify-center">
-          <img src="/icon.png" alt="Task Battles" className="w-6 h-6 rounded" />
-          <h1 className="text-xl font-semibold">Task Battles</h1>
-        </div>
-        <h2 className="text-lg font-medium text-center mb-1">Set a new password</h2>
-        <p className="text-sm text-muted-foreground text-center mb-6">
-          Choose a new password for your account.
-        </p>
-        <form onSubmit={handleUpdatePassword} className="space-y-4">
-          <FieldRow label="New password" icon={<Lock size={14} />}>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoFocus
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </FieldRow>
-          <FieldRow label="Confirm new password" icon={<Lock size={14} />}>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </FieldRow>
-          {error && (
-            <div className="text-xs text-red-500 bg-red-500/10 rounded-lg px-3 py-2">
-              {error}
-            </div>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            <KeyRound size={15} />
-            {loading ? "Updating…" : "Update password"}
-          </button>
-        </form>
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => { clearRecoveryMode(); }}
-            className="text-xs text-primary hover:underline font-medium"
-          >
-            Cancel
-          </button>
         </div>
       </Shell>
     );
@@ -185,37 +120,6 @@ export default function AuthScreen() {
     );
   }
 
-  if (resetLinkSent) {
-    return (
-      <Shell>
-        <div className="flex items-center justify-center mb-4">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Inbox size={24} className="text-primary" />
-          </div>
-        </div>
-        <h2 className="text-lg font-medium mb-2">Check your email</h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          If an account exists for <strong className="text-foreground">{email}</strong>, we've sent a password reset link. It expires in one hour.
-        </p>
-        <button
-          onClick={() => { setResetLinkSent(false); switchMode("signin"); }}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <ArrowLeft size={15} />
-          Back to Sign In
-        </button>
-        <div className="mt-3 text-center">
-          <button
-            onClick={() => { setResetLinkSent(false); setError(null); }}
-            className="text-xs text-primary hover:underline font-medium"
-          >
-            Didn't get it? Try again
-          </button>
-        </div>
-      </Shell>
-    );
-  }
-
   return (
     <Shell>
       <div className="flex items-center gap-2 mb-6 justify-center">
@@ -228,7 +132,9 @@ export default function AuthScreen() {
       </h2>
       <p className="text-sm text-muted-foreground text-center mb-6">
         {mode === "forgot"
-          ? "Enter your email and we'll send you a reset link."
+          ? resetCodeSent
+            ? "Enter the code from your email and choose a new password."
+            : "Enter your email and we'll send you a 6-digit reset code."
           : mode === "signin"
           ? "Welcome back! Sign in to continue."
           : "Get started with your free account."}
@@ -245,6 +151,50 @@ export default function AuthScreen() {
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </FieldRow>
+
+        {mode === "forgot" && resetCodeSent && (
+          <FieldRow label="6-digit code" icon={<KeyRound size={14} />}>
+            <input
+              type="text"
+              required
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              value={resetCode}
+              onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              autoFocus
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm tracking-[0.3em] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </FieldRow>
+        )}
+
+        {mode === "forgot" && resetCodeSent && (
+          <>
+            <FieldRow label="New password" icon={<Lock size={14} />}>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </FieldRow>
+            <FieldRow label="Confirm new password" icon={<Lock size={14} />}>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </FieldRow>
+          </>
+        )}
 
         {mode !== "forgot" && (
           <FieldRow label="Password" icon={<Lock size={14} />}>
@@ -271,11 +221,11 @@ export default function AuthScreen() {
           disabled={loading}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {mode === "forgot" ? <Inbox size={15} /> : mode === "signin" ? <LogIn size={15} /> : <UserPlus size={15} />}
+          {mode === "forgot" ? (resetCodeSent ? <KeyRound size={15} /> : <Inbox size={15} />) : mode === "signin" ? <LogIn size={15} /> : <UserPlus size={15} />}
           {loading
             ? "Please wait…"
             : mode === "forgot"
-            ? "Send reset link"
+            ? resetCodeSent ? "Update password" : "Send reset code"
             : mode === "signin"
             ? "Sign In"
             : "Sign Up"}
@@ -305,6 +255,14 @@ export default function AuthScreen() {
             className="text-xs text-muted-foreground hover:underline font-medium"
           >
             Back to sign in
+          </button>
+        )}
+        {mode === "forgot" && resetCodeSent && (
+          <button
+            onClick={() => { setResetCodeSent(false); setResetCode(""); setError(null); }}
+            className="text-xs text-muted-foreground hover:underline font-medium"
+          >
+            Request a new code
           </button>
         )}
       </div>

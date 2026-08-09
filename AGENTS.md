@@ -69,7 +69,7 @@ All secrets stored in root `.env` file:
 - `BASE_PATH`
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_AUTH_REDIRECT_URL` (optional — overrides the default `taskbattles://auth/callback` for auth emails; set to `http://localhost:5173` in dev to test reset/signup in browser)
+- `VITE_AUTH_REDIRECT_URL` (optional — overrides the default `taskbattles://auth/callback` for signup confirmation emails; password resets use an in-app OTP)
 
 ## Next Steps / TODO
 
