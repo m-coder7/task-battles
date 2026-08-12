@@ -75,6 +75,33 @@ Grab the latest build for your platform from the [Releases page](https://github.
 
 Each installer sets up both the main app and the widgets companion — the widgets app runs quietly in the background and starts automatically.
 
+## macOS First Launch
+
+Task Battles for macOS is currently unsigned. macOS may show an
+“unidentified developer” warning the first time you open it.
+
+1. Download the macOS Apple Silicon release.
+2. Open the `.dmg` file.
+3. Drag `Task Battles` into the `Applications` folder.
+4. Open the `Applications` folder in Finder.
+5. Control-click, or right-click, `Task Battles`.
+6. Choose **Open**.
+7. In the warning dialog, choose **Open** again.
+
+You only need to use this approval procedure the first time.
+
+If macOS still blocks the app:
+
+1. Try opening the app once so macOS records the block.
+2. Open **System Settings**.
+3. Go to **Privacy & Security**.
+4. Scroll down to the security message about Task Battles.
+5. Click **Open Anyway**.
+6. Confirm by clicking **Open**.
+
+The macOS download is built for Apple Silicon Macs and Apple Silicon
+virtual machines. Intel Macs are not supported.
+
 ## Tech stack
 
 - **Frontend:** TypeScript, React, Vite
