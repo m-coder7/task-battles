@@ -42,7 +42,9 @@ if (rawPort && (Number.isNaN(port) || port <= 0)) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH ?? "/";
+// Tauri serves the bundled frontend from its application protocol root.
+// Keep packaged builds independent of any CI BASE_PATH value.
+const basePath = isTauri ? "/" : process.env.BASE_PATH ?? "/";
 if (!isTauri && !process.env.BASE_PATH) {
   throw new Error(
     "BASE_PATH environment variable is required but was not provided.",

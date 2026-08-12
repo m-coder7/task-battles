@@ -331,8 +331,24 @@ fn read_pending_actions() -> Result<Vec<serde_json::Value>, String> {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
+#[cfg(target_os = "linux")]
+fn configure_linux_webview() {
+    // WebKitGTK can render a blank window when DMABUF or compositing is
+    // incompatible with the user's Wayland/X11 graphics stack. Respect an
+    // existing value so advanced users can opt into their preferred mode.
+    if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+    if env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    configure_linux_webview();
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
