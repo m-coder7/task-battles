@@ -65,7 +65,12 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev squashfs-tools
+
+          curl -fsSL \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -o "$RUNNER_TEMP/appimagetool.AppImage"
+          chmod +x "$RUNNER_TEMP/appimagetool.AppImage"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -103,6 +108,23 @@ jobs:
           projectPath: ${{ matrix.app_dir }}
           tauriScript: pnpm tauri
           args: --target ${{ matrix.rust_target }}
+
+      - name: Repair Linux AppImages
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool.AppImage
+        run: |
+          chmod +x scripts/repair-linux-appimage.sh
+
+          while IFS= read -r -d '' appimage; do
+            scripts/repair-linux-appimage.sh "$appimage"
+          done < <(
+            find "${{ matrix.app_dir }}/src-tauri/target/${{ matrix.rust_target }}/release/bundle" \
+              -type f \
+              -name '*.AppImage' \
+              -print0
+          )
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
