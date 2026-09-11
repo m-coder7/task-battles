@@ -110,8 +110,119 @@ create policy "Profile owner can update reactions" on public.reactions
     select 1 from public.profiles where invite_code = reactions.invite_code and user_id = auth.uid()
   ));
 
+-- 5. Notes (sticky-note style notes)
+create table if not exists public.notes (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text,
+  content text,
+  color text default 'default',
+  pinned boolean not null default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- 6. Goals (tasks/habits per day, with repeat rules)
+create table if not exists public.goals (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  category text not null default 'must-do',
+  date text not null,
+  time text,
+  completed boolean not null default false,
+  completed_dates jsonb not null default '[]'::jsonb,
+  repeat text default 'none',
+  repeat_days jsonb,
+  notifications_enabled boolean not null default false,
+  notification_message text default '',
+  last_notified_date text,
+  created_at timestamp with time zone default now()
+);
+
+-- 7. Events (calendar events)
+create table if not exists public.events (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  date text not null,
+  start_time text,
+  end_time text,
+  color text default 'blue',
+  description text,
+  all_day boolean not null default false,
+  repeat text default 'none',
+  repeat_days jsonb,
+  created_at timestamp with time zone default now()
+);
+
+-- 8. Diary (one entry per day, keyed by uuid id + date)
+create table if not exists public.diary (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date text not null,
+  content text,
+  mood text,
+  tags jsonb default '[]'::jsonb,
+  streak_title text,
+  streak_start_date text,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique (user_id, date)
+);
+
+-- Enable Row Level Security
+alter table public.notes enable row level security;
+alter table public.goals enable row level security;
+alter table public.events enable row level security;
+alter table public.diary enable row level security;
+
+-- RLS Policies for notes
+create policy "Users can select own notes" on public.notes
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own notes" on public.notes
+  for insert with check (auth.uid() = user_id);
+create policy "Users can update own notes" on public.notes
+  for update using (auth.uid() = user_id);
+create policy "Users can delete own notes" on public.notes
+  for delete using (auth.uid() = user_id);
+
+-- RLS Policies for goals
+create policy "Users can select own goals" on public.goals
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own goals" on public.goals
+  for insert with check (auth.uid() = user_id);
+create policy "Users can update own goals" on public.goals
+  for update using (auth.uid() = user_id);
+create policy "Users can delete own goals" on public.goals
+  for delete using (auth.uid() = user_id);
+
+-- RLS Policies for events
+create policy "Users can select own events" on public.events
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own events" on public.events
+  for insert with check (auth.uid() = user_id);
+create policy "Users can update own events" on public.events
+  for update using (auth.uid() = user_id);
+create policy "Users can delete own events" on public.events
+  for delete using (auth.uid() = user_id);
+
+-- RLS Policies for diary
+create policy "Users can select own diary" on public.diary
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own diary" on public.diary
+  for insert with check (auth.uid() = user_id);
+create policy "Users can update own diary" on public.diary
+  for update using (auth.uid() = user_id);
+create policy "Users can delete own diary" on public.diary
+  for delete using (auth.uid() = user_id);
+
 -- Enable Realtime for all tables
 alter publication supabase_realtime add table public.profiles;
 alter publication supabase_realtime add table public.daily_stats;
 alter publication supabase_realtime add table public.monthly_stats;
 alter publication supabase_realtime add table public.reactions;
+alter publication supabase_realtime add table public.notes;
+alter publication supabase_realtime add table public.goals;
+alter publication supabase_realtime add table public.events;
+alter publication supabase_realtime add table public.diary;
