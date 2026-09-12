@@ -11,6 +11,7 @@ import {
   pushLocalOnly,
   isDeleteQueued,
 } from "@/hooks/useSupabaseSync";
+import { requestWidgetExport } from "@/lib/widgetExportBus";
 
 export type GoalCategory = "must-do" | "should-do" | "nice-to-have";
 export type GoalRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
@@ -222,6 +223,7 @@ export function useGoals() {
     };
     setGoals((prev) => [...prev, newGoal]);
     syncGoal(newGoal);
+    requestWidgetExport();
     return newGoal;
   }, [syncGoal]);
 
@@ -229,6 +231,7 @@ export function useGoals() {
     setGoals((prev) => {
       const next = prev.map((g) => (g.id === id ? { ...g, ...updates } : g));
       syncGoal(next.find((g) => g.id === id));
+      requestWidgetExport();
       return next;
     });
   }, [syncGoal]);
@@ -236,6 +239,7 @@ export function useGoals() {
   const deleteGoal = useCallback((id: string) => {
     setGoals((prev) => prev.filter((g) => g.id !== id));
     if (userId) syncDelete(TABLE, id);
+    requestWidgetExport();
   }, [userId]);
 
   const toggleComplete = useCallback((id: string) => {
@@ -253,6 +257,7 @@ export function useGoals() {
         };
       });
       syncGoal(next.find((g) => g.id === id));
+      requestWidgetExport();
       return next;
     });
   }, [syncGoal]);

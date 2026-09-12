@@ -10,6 +10,7 @@ import {
   pushLocalOnly,
   isDeleteQueued,
 } from "@/hooks/useSupabaseSync";
+import { requestWidgetExport } from "@/lib/widgetExportBus";
 
 export type EventColor = "blue" | "red" | "green" | "orange" | "purple" | "pink";
 export type EventRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
@@ -131,6 +132,7 @@ export function useEvents() {
     };
     setEvents((prev) => [...prev, newEvent]);
     if (userId) syncUpsert(TABLE, newEvent.id, toRow(userId, newEvent));
+    requestWidgetExport();
     return newEvent;
   }, [userId]);
 
@@ -139,6 +141,7 @@ export function useEvents() {
       const next = prev.map((e) => (e.id === id ? { ...e, ...updates } : e));
       const updated = next.find((e) => e.id === id);
       if (userId && updated) syncUpsert(TABLE, id, toRow(userId, updated));
+      requestWidgetExport();
       return next;
     });
   }, [userId]);
@@ -146,6 +149,7 @@ export function useEvents() {
   const deleteEvent = useCallback((id: string) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
     if (userId) syncDelete(TABLE, id);
+    requestWidgetExport();
   }, [userId]);
 
   const getEventsForDate = useCallback(

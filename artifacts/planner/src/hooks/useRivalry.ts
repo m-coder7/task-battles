@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { requestWidgetExport } from "@/lib/widgetExportBus";
 import { format, subDays, getDaysInMonth, getDate } from "date-fns";
 
 function getProfileKey(userId: string | null | undefined) {
@@ -113,6 +114,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
         const p: RivalryProfile = { userId, displayName, inviteCode };
         localStorage.setItem(getProfileKey(userId), JSON.stringify(p));
         setProfile(p);
+        requestWidgetExport();
         setError("Profile created locally. Rivalry features that need a server are limited.");
         setLoading(false);
         return;
@@ -129,6 +131,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       const p: RivalryProfile = { userId, displayName, inviteCode };
       localStorage.setItem(getProfileKey(userId), JSON.stringify(p));
       setProfile(p);
+      requestWidgetExport();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to create profile";
       if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
@@ -144,6 +147,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
     const updated = { ...profile, displayName: newName };
     localStorage.setItem(getProfileKey(userId), JSON.stringify(updated));
     setProfile(updated);
+    requestWidgetExport();
     const { error } = await supabase.from("profiles").update({ display_name: newName }).eq("invite_code", profile.inviteCode);
     if (error) enqueueWrite({ id: `profile_${profile.inviteCode}`, table: "profiles", data: { invite_code: profile.inviteCode, user_id: profile.userId, display_name: newName } });
   }, [profile, userId]);
@@ -166,6 +170,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
       const info: RivalInfo = { userId: (data as Record<string,string>).user_id, displayName: (data as Record<string,string>).display_name, inviteCode: (data as Record<string,string>).invite_code };
       if (userId) localStorage.setItem(getRivalKey(userId), clean);
       setRivalCodeState(clean); setRivalInfo(info);
+      requestWidgetExport();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to connect rival";
       setError(msg.toLowerCase().includes("fetch") ? "No connection. Try again." : msg);
@@ -175,6 +180,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
   const disconnectRival = useCallback(() => {
     if (userId) localStorage.removeItem(getRivalKey(userId));
     setRivalCodeState(null); setRivalInfo(null); setRivalDailyStats(null); setRivalMonthlyStats(null); setWeekHistory([]);
+    requestWidgetExport();
   }, [userId]);
 
   const deleteProfile = useCallback(() => {
@@ -185,6 +191,7 @@ export function useRivalry(myStats: { completed: number; total: number }) {
     setProfile(null); setRivalCodeState(null); setRivalInfo(null);
     setRivalDailyStats(null); setRivalMonthlyStats(null); setMyDailyStats(null); setMyMonthlyStats(null);
     setWeekHistory([]); setIncomingReaction(null); setLastMonthResult(null);
+    requestWidgetExport();
   }, [userId]);
 
   const sendReaction = useCallback(async (emoji: string) => {
