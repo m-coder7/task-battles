@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { readSharedDataFresh } from "@/lib/sharedData";
 
 interface Event {
   id: string;
@@ -14,9 +15,8 @@ export default function CalendarWidget({ theme }: { theme: string }) {
 
   async function load() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const data: any = await invoke("read_shared_data");
-      setEvents((data?.events || []) as Event[]);
+      const data = await readSharedDataFresh();
+      if (data) setEvents((data?.events || []) as Event[]);
     } catch {
       setEvents([]);
     }

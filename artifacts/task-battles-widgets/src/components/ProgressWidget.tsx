@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Target } from "lucide-react";
+import { readSharedDataFresh } from "@/lib/sharedData";
 
 interface Goal {
   id: string;
@@ -34,9 +35,8 @@ export default function ProgressWidget({ theme }: { theme: string }) {
 
   async function load() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const data: any = await invoke("read_shared_data");
-      setGoals((data?.goals || []) as Goal[]);
+      const data = await readSharedDataFresh();
+      if (data) setGoals((data?.goals || []) as Goal[]);
     } catch {
       setGoals([]);
     }

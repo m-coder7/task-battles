@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { CheckCircle2, Circle, LayoutGrid } from "lucide-react";
+import { readSharedDataFresh } from "@/lib/sharedData";
 
 interface Goal {
   id: string;
@@ -58,9 +59,8 @@ export default function TaskWidget({ theme }: { theme: string }) {
 
   async function load() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const data: any = await invoke("read_shared_data");
-      setGoals((data?.goals || []) as Goal[]);
+      const data = await readSharedDataFresh();
+      if (data) setGoals((data?.goals || []) as Goal[]);
     } catch {
       setGoals([]);
     }
@@ -83,11 +83,13 @@ export default function TaskWidget({ theme }: { theme: string }) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("write_action", {
-        actionJson: JSON.stringify({ type: "toggle_goal", goal_id: goalId }),
+        actionJson: JSON.stringify({
+          type: "toggle_goal",
+          goal_id: goalId,
+          id: crypto.randomUUID(),
+        }),
       });
     } catch {}
-
-    setTimeout(load, 1500);
   }, []);
 
   const todayGoals = goals.filter(isActiveToday);

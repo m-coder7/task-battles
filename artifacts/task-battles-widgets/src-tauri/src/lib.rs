@@ -3,8 +3,10 @@ use tauri::tray::TrayIconBuilder;
 use tauri::menu::{Menu, MenuItem};
 use tauri_plugin_opener::OpenerExt;
 use std::collections::{HashMap, HashSet};
+use std::io::{Read, Seek};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use fs2::FileExt;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -239,20 +241,62 @@ fn write_action(action_json: String) -> Result<(), String> {
     let dir = path.parent().unwrap();
     let _ = std::fs::create_dir_all(dir);
 
-    let mut actions: Vec<serde_json::Value> = if path.exists() {
-        let contents = std::fs::read_to_string(&path).unwrap_or("[]".to_string());
-        serde_json::from_str(&contents).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
     let action: serde_json::Value = serde_json::from_str(&action_json)
         .map_err(|e| format!("Invalid action JSON: {}", e))?;
-    actions.push(action);
 
-    std::fs::write(&path, serde_json::to_string(&actions).unwrap_or("[]".to_string()))
-        .map_err(|e| e.to_string())?;
+    // Hold an exclusive advisory lock across the whole read-modify-write so the
+    // planner app can never interleave a read+clear between our read and write.
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&path)
+        .map_err(|e| format!("Failed to open pending actions: {}", e))?;
 
+    // Brief retry loop: better to fail one click than to deadlock.
+    let mut locked = false;
+    for _ in 0..5 {
+        if file.lock_exclusive().is_ok() {
+            locked = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    if !locked {
+        return Err("Failed to lock pending actions file".to_string());
+    }
+
+    let result = (|| -> Result<(), String> {
+        file.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let mut contents = String::new();
+        // Read may fail on a fresh empty file; treat as empty queue.
+        if file.read_to_string(&mut contents).is_err() {
+            contents = String::new();
+        }
+        let mut actions: Vec<serde_json::Value> =
+            serde_json::from_str(&contents).unwrap_or_default();
+
+        // De-dup: skip if the same action id is already queued.
+        if let Some(id) = action.get("id").and_then(|v| v.as_str()) {
+            if actions.iter().any(|a| a.get("id").and_then(|v| v.as_str()) == Some(id)) {
+                return Ok(());
+            }
+        }
+        actions.push(action);
+
+        file.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        file.set_len(0).map_err(|e| e.to_string())?;
+        write_all(&mut file, serde_json::to_string(&actions).unwrap_or("[]".into()))
+    })();
+
+    let _ = file.unlock();
+    result
+}
+
+fn write_all(file: &mut std::fs::File, s: String) -> Result<(), String> {
+    use std::io::Write;
+    file.write_all(s.as_bytes()).map_err(|e| e.to_string())?;
+    file.flush().map_err(|e| e.to_string())?;
     Ok(())
 }
 
