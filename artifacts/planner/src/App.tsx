@@ -157,14 +157,19 @@ export default function App() {
   }, []);
 
   // Process widget toggle actions from floating widgets
+  const appliedActionIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (typeof window === "undefined" || !((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) return;
     async function processActions() {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
-        const actions = await invoke("read_pending_actions") as Array<{type: string; goal_id: string}>;
+        const actions = await invoke("read_pending_actions") as Array<{type: string; goal_id: string; id?: string}>;
         for (const action of actions) {
           if (action.type === "toggle_goal" && action.goal_id) {
+            // Guard against rare double-delivery of the same queued action.
+            const actionId = action.id ?? `${action.type}_${action.goal_id}`;
+            if (appliedActionIds.current.has(actionId)) continue;
+            appliedActionIds.current.add(actionId);
             toggleComplete(action.goal_id);
           }
         }

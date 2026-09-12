@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Swords, Trophy, User } from "lucide-react";
+import { readSharedDataFresh } from "@/lib/sharedData";
 
 export default function RivalryScoreWidget({ theme }: { theme: string }) {
   const [data, setData] = useState<any>(null);
@@ -7,9 +8,8 @@ export default function RivalryScoreWidget({ theme }: { theme: string }) {
 
   async function load() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const json: any = await invoke("read_shared_data");
-      setData(json?.rivalry || null);
+      const json = await readSharedDataFresh();
+      if (json) setData(json?.rivalry || null);
     } catch {
       setData(null);
     }

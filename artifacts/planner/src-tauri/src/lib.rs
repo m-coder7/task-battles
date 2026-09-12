@@ -66,6 +66,7 @@ fn export_data_for_widgets(
         "diary": serde_json::from_str::<serde_json::Value>(&diary_json).unwrap_or(serde_json::json!({})),
         "config": config,
         "exported_at": chrono::Utc::now().to_rfc3339(),
+        "exported_at_ms": chrono::Utc::now().timestamp_millis(),
     });
 
     std::fs::write(&path, serde_json::to_string(&data).unwrap_or_default())
@@ -317,16 +318,54 @@ fn read_pending_actions() -> Result<Vec<serde_json::Value>, String> {
         return Ok(Vec::new());
     }
 
-    let contents = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read pending actions: {}", e))?;
+    // Hold an exclusive advisory lock across the whole read AND the clear so a
+    // widget app's write_action append can never interleave between the two.
+    use fs2::FileExt;
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&path)
+        .map_err(|e| format!("Failed to open pending actions: {}", e))?;
 
-    let actions: Vec<serde_json::Value> = serde_json::from_str(&contents)
-        .unwrap_or_default();
+    let mut locked = false;
+    for _ in 0..5 {
+        if file.lock_exclusive().is_ok() {
+            locked = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    if !locked {
+        return Err("Failed to lock pending actions file".to_string());
+    }
 
-    // Clear the file after reading
-    std::fs::write(&path, "[]").map_err(|e| e.to_string())?;
+    let result = (|| -> Result<Vec<serde_json::Value>, String> {
+        use std::io::{Read, Seek};
+        file.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let mut contents = String::new();
+        if file.read_to_string(&mut contents).is_err() {
+            contents = String::new();
+        }
+        let actions: Vec<serde_json::Value> =
+            serde_json::from_str(&contents).unwrap_or_default();
 
-    Ok(actions)
+        if actions.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Clear the file (truncate) — still under the same lock.
+        file.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        file.set_len(0).map_err(|e| e.to_string())?;
+        use std::io::Write;
+        file.write_all(b"[]").map_err(|e| e.to_string())?;
+        file.flush().map_err(|e| e.to_string())?;
+
+        Ok(actions)
+    })();
+
+    let _ = file.unlock();
+    result
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────

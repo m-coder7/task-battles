@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sun, CheckCircle2, Circle, Clock as ClockIcon } from "lucide-react";
+import { readSharedDataFresh } from "@/lib/sharedData";
 
 interface Goal {
   id: string; title: string; completed: boolean;
@@ -35,10 +36,11 @@ export default function DayViewWidget({ theme }: { theme: string }) {
 
   async function load() {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const data: any = await invoke("read_shared_data");
-      setGoals((data?.goals || []) as Goal[]);
-      setEvents((data?.events || []) as Event[]);
+      const data = await readSharedDataFresh();
+      if (data) {
+        setGoals((data?.goals || []) as Goal[]);
+        setEvents((data?.events || []) as Event[]);
+      }
     } catch {
       setGoals([]); setEvents([]);
     }
