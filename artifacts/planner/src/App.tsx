@@ -25,6 +25,7 @@ import { useEvents, CalendarEvent, COLOR_MAP } from "@/hooks/useEvents";
 import { useGoals } from "@/hooks/useGoals";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import { requestWidgetExport } from "@/lib/widgetExportBus";
 import AuthScreen from "@/components/AuthScreen";
 import { Toaster } from "sonner";
 
@@ -145,50 +146,15 @@ export default function App() {
     return () => window.removeEventListener("click", onClick);
   }, [themeOpen]);
 
-  // Trigger immediate widget export from WidgetManager
-  const [widgetExportTick, setWidgetExportTick] = useState(0);
-  const triggerWidgetExport = useCallback(() => setWidgetExportTick(t => t + 1), []);
+  // Widget export: every data mutation triggers an export via the shared bus
+  // (debounced/coalesced); WidgetManager config changes call it directly.
+  const triggerWidgetExport = requestWidgetExport;
 
-  // Export data + widget config for widget app
-  // Export data + widget config for widget app (debounced)
-  const exportTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+  // Export once on mount so the shared file is fresh right after app start
   useEffect(() => {
     if (typeof window === "undefined" || !((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) return;
-    
-    async function exportData() {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const goalsKey = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
-        const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
-        const rivalryKey = Object.keys(localStorage).find(k => k.startsWith('rivalry_profile_')) || 'rivalry_profile_anon';
-        const diaryKey = Object.keys(localStorage).find(k => k.startsWith('task_battles_diary_')) || 'task_battles_diary_anon';
-        const goalsJson = localStorage.getItem(goalsKey) || '[]';
-        const eventsJson = localStorage.getItem(eventsKey) || '[]';
-        const rivalryJson = localStorage.getItem(rivalryKey) || '{}';
-        const diaryJson = localStorage.getItem(diaryKey) || '{}';
-        const configJson = localStorage.getItem('tb_widget_config') || '{"widgets":[]}';
-        await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson, rivalryJson, diaryJson });
-        console.log("[Widget] Data exported successfully");
-      } catch (e) {
-        console.error("[Widget] Export failed:", e);
-      }
-    }
-    
-    // Clear previous timeout
-    if (exportTimeoutRef.current) {
-      clearTimeout(exportTimeoutRef.current);
-    }
-    
-    // Debounce: wait 500ms before exporting
-    exportTimeoutRef.current = setTimeout(exportData, 500);
-    
-    return () => {
-      if (exportTimeoutRef.current) {
-        clearTimeout(exportTimeoutRef.current);
-      }
-    };
-  }, [goals, events, widgetExportTick]);
+    requestWidgetExport();
+  }, []);
 
   // Process widget toggle actions from floating widgets
   useEffect(() => {

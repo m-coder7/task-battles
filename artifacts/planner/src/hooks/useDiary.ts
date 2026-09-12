@@ -10,6 +10,7 @@ import {
   pushLocalOnly,
   isDeleteQueued,
 } from "@/hooks/useSupabaseSync";
+import { requestWidgetExport } from "@/lib/widgetExportBus";
 
 export interface DiaryEntry {
   id: string;
@@ -128,6 +129,7 @@ export function useDiary() {
         updatedAt: now,
       };
       if (userId) syncUpsert(TABLE, entry.id, toRow(userId, entry));
+      requestWidgetExport();
       return { ...prev, [key]: entry };
     });
   }, [userId]);
@@ -139,6 +141,7 @@ export function useDiary() {
       const next = { ...prev };
       delete next[key];
       if (userId && id) syncDelete(TABLE, id);
+      requestWidgetExport();
       return next;
     });
   }, [userId]);
