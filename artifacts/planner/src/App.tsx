@@ -74,6 +74,10 @@ export default function App() {
   const [themeOpen, setThemeOpen] = useState(false);
   const { events, addEvent, updateEvent, deleteEvent } = useEvents();
   const { goals, markNotified, toggleComplete } = useGoals();
+  const goalsRef = useRef<ReturnType<typeof useGoals>["goals"]>(goals);
+  useEffect(() => {
+    goalsRef.current = goals;
+  }, [goals]);
   const { mode, setMode, themeIcon, themeLabel } = useTheme();
 
   // Handle OAuth callback from URL hash (e.g. email confirmation)
@@ -170,11 +174,14 @@ export default function App() {
             const actionId = action.id ?? `${action.type}_${action.goal_id}`;
             if (appliedActionIds.current.has(actionId)) continue;
             appliedActionIds.current.add(actionId);
+            console.log("[ActionApply] received action:", JSON.stringify(action));
+            console.log("[ActionApply] current goal ids:", goalsRef.current.map(g => g.id));
+            console.log("[ActionApply] match found:", goalsRef.current.some(g => g.id === action.goal_id));
             toggleComplete(action.goal_id);
           }
         }
-      } catch {
-        // ignore if no pending actions
+      } catch (e) {
+        console.error("[ActionApply] read_pending_actions failed:", e);
       }
     }
     processActions();

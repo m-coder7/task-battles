@@ -89,7 +89,7 @@ export default function TaskWidget({ theme }: { theme: string }) {
           id: crypto.randomUUID(),
         }),
       });
-    } catch {}
+    } catch (e) { console.error("[TaskWidget] write_action failed:", e); }
   }, []);
 
   const todayGoals = goals.filter(isActiveToday);

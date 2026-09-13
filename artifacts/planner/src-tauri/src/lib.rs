@@ -51,9 +51,15 @@ fn export_data_for_widgets(
     diary_json: String,
 ) -> Result<(), String> {
     let local_app_data = dirs::data_local_dir()
-        .ok_or("Could not find local app data directory")?;
+        .ok_or_else(|| {
+            eprintln!("[WidgetExport] failed: could not find local app data directory");
+            "Could not find local app data directory"
+        })?;
     let dir = local_app_data.join("TaskBattles");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("[WidgetExport] create_dir_all({:?}) failed: {}", dir, e);
+        return Err(e.to_string());
+    }
     let path = dir.join("widgets.json");
 
     let config: serde_json::Value = serde_json::from_str(&config_json)
@@ -69,8 +75,16 @@ fn export_data_for_widgets(
         "exported_at_ms": chrono::Utc::now().timestamp_millis(),
     });
 
-    std::fs::write(&path, serde_json::to_string(&data).unwrap_or_default())
-        .map_err(|e| e.to_string())?;
+    let json = serde_json::to_string(&data).unwrap_or_else(|e| {
+        eprintln!("[WidgetExport] JSON serialization failed: {}", e);
+        String::new()
+    });
+    let bytes_written = json.len();
+    if let Err(e) = std::fs::write(&path, &json) {
+        eprintln!("[WidgetExport] write {:?} failed: {}", path, e);
+        return Err(e.to_string());
+    }
+    eprintln!("[WidgetExport] success: wrote {} bytes to {:?}", bytes_written, path);
     Ok(())
 }
 

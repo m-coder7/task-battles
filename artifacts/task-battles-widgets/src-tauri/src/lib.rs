@@ -239,38 +239,75 @@ fn write_action(action_json: String) -> Result<(), String> {
         .join("pending-actions.json");
 
     let dir = path.parent().unwrap();
-    let _ = std::fs::create_dir_all(dir);
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        let msg = format!("create_dir_all({:?}) failed: {}", dir, e);
+        log(&msg);
+        eprintln!("[WidgetAction] {}", msg);
+        return Err(msg);
+    }
 
-    let action: serde_json::Value = serde_json::from_str(&action_json)
-        .map_err(|e| format!("Invalid action JSON: {}", e))?;
+    let action: serde_json::Value = match serde_json::from_str(&action_json) {
+        Ok(a) => a,
+        Err(e) => {
+            let msg = format!("Invalid action JSON: {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+            return Err(msg);
+        }
+    };
+    let action_id = action.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
 
     // Hold an exclusive advisory lock across the whole read-modify-write so the
     // planner app can never interleave a read+clear between our read and write.
-    let mut file = std::fs::OpenOptions::new()
+    let mut file = match std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .open(&path)
-        .map_err(|e| format!("Failed to open pending actions: {}", e))?;
+    {
+        Ok(f) => f,
+        Err(e) => {
+            let msg = format!("Failed to open pending actions: {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+            return Err(msg);
+        }
+    };
 
     // Brief retry loop: better to fail one click than to deadlock.
     let mut locked = false;
-    for _ in 0..5 {
+    for attempt in 0..5 {
         if file.lock_exclusive().is_ok() {
             locked = true;
             break;
         }
+        if attempt == 4 {
+            let msg = format!("lock attempt {} failed: {:?}", attempt, file.lock_exclusive().err());
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+        }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     if !locked {
-        return Err("Failed to lock pending actions file".to_string());
+        let msg = "Failed to lock pending actions file after 5 attempts".to_string();
+        log(&msg);
+        eprintln!("[WidgetAction] {}", msg);
+        return Err(msg);
     }
 
     let result = (|| -> Result<(), String> {
-        file.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        if let Err(e) = file.seek(std::io::SeekFrom::Start(0)) {
+            let msg = format!("seek failed: {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+            return Err(msg);
+        }
         let mut contents = String::new();
         // Read may fail on a fresh empty file; treat as empty queue.
-        if file.read_to_string(&mut contents).is_err() {
+        if let Err(e) = file.read_to_string(&mut contents) {
+            let msg = format!("read_to_string failed (treating as empty queue): {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
             contents = String::new();
         }
         let mut actions: Vec<serde_json::Value> =
@@ -279,14 +316,45 @@ fn write_action(action_json: String) -> Result<(), String> {
         // De-dup: skip if the same action id is already queued.
         if let Some(id) = action.get("id").and_then(|v| v.as_str()) {
             if actions.iter().any(|a| a.get("id").and_then(|v| v.as_str()) == Some(id)) {
+                let msg = format!("action {} already queued, skipping (dedup)", id);
+                log(&msg);
+                eprintln!("[WidgetAction] {}", msg);
                 return Ok(());
             }
         }
         actions.push(action);
 
-        file.seek(std::io::SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-        file.set_len(0).map_err(|e| e.to_string())?;
-        write_all(&mut file, serde_json::to_string(&actions).unwrap_or("[]".into()))
+        if let Err(e) = file.seek(std::io::SeekFrom::Start(0)) {
+            let msg = format!("seek (write) failed: {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+            return Err(msg);
+        }
+        if let Err(e) = file.set_len(0) {
+            let msg = format!("set_len failed: {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+            return Err(msg);
+        }
+        let json = serde_json::to_string(&actions).unwrap_or("[]".into());
+        let bytes_written = json.len();
+        let write_result = write_all(&mut file, json);
+        if let Err(e) = &write_result {
+            let msg = format!("write_all failed: {}", e);
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+        }
+        if write_result.is_ok() {
+            let msg = format!(
+                "write_action success: wrote {} ({} bytes) to queue ({} actions pending)",
+                action_id.as_deref().unwrap_or("<no id>"),
+                bytes_written,
+                actions.len()
+            );
+            log(&msg);
+            eprintln!("[WidgetAction] {}", msg);
+        }
+        write_result
     })();
 
     let _ = file.unlock();
