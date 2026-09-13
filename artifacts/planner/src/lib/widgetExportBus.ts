@@ -25,9 +25,9 @@ async function exportData() {
     const diaryJson = localStorage.getItem(diaryKey) || '{}';
     const configJson = localStorage.getItem('tb_widget_config') || '{"widgets":[]}';
     await invoke("export_data_for_widgets", { goalsJson, eventsJson, configJson, rivalryJson, diaryJson });
-    console.log("[Widget] Data exported successfully");
+    console.log("[WidgetExport] success");
   } catch (e) {
-    console.error("[Widget] Export failed:", e);
+    console.error("[WidgetExport] failed:", e);
   }
 }
 

@@ -243,8 +243,10 @@ export function useGoals() {
   }, [userId]);
 
   const toggleComplete = useCallback((id: string) => {
+    console.log("[toggleComplete] called with id:", id);
     const today = TODAY();
     setGoals((prev) => {
+      console.log("[toggleComplete] goal found for id?", prev.some(g => g.id === id));
       const next = prev.map((g) => {
         if (g.id !== id) return g;
         const repeat = g.repeat ?? "none";
