@@ -164,29 +164,33 @@ export default function App() {
   const appliedActionIds = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (typeof window === "undefined" || !((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)) return;
-    async function processActions() {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const actions = await invoke("read_pending_actions") as Array<{type: string; goal_id: string; id?: string}>;
-        for (const action of actions) {
-          if (action.type === "toggle_goal" && action.goal_id) {
-            // Guard against rare double-delivery of the same queued action.
-            const actionId = action.id ?? `${action.type}_${action.goal_id}`;
-            if (appliedActionIds.current.has(actionId)) continue;
-            appliedActionIds.current.add(actionId);
-            console.log("[ActionApply] received action:", JSON.stringify(action));
-            console.log("[ActionApply] current goal ids:", goalsRef.current.map(g => g.id));
-            console.log("[ActionApply] match found:", goalsRef.current.some(g => g.id === action.goal_id));
-            toggleComplete(action.goal_id);
-          }
-        }
-      } catch (e) {
-        console.error("[ActionApply] read_pending_actions failed:", e);
+    type WidgetAction = { type: string; goal_id: string; id?: string };
+    function apply(actions: WidgetAction[]) {
+      for (const action of actions) {
+        if (action.type !== "toggle_goal" || !action.goal_id) continue;
+        // Guard against rare double-delivery of the same queued action.
+        const actionId = action.id ?? `${action.type}_${action.goal_id}`;
+        if (appliedActionIds.current.has(actionId)) continue;
+        appliedActionIds.current.add(actionId);
+        toggleComplete(action.goal_id);
       }
     }
-    processActions();
-    const id = setInterval(processActions, 3000);
-    return () => clearInterval(id);
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const { listen } = await import("@tauri-apps/api/event");
+        const un = await listen<WidgetAction[]>("widget-actions", (e) => apply(e.payload));
+        if (cancelled) { un(); return; }
+        unlisten = un;
+        // Pick up anything queued before this window started listening.
+        apply((await invoke("read_pending_actions")) as WidgetAction[]);
+      } catch (e) {
+        console.error("[ActionApply] failed:", e);
+      }
+    })();
+    return () => { cancelled = true; unlisten?.(); };
   }, [toggleComplete]);
 
   const openNew = useCallback((date?: string, time?: string) => {

@@ -3,6 +3,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::webview::WebviewWindowBuilder;
 use tauri::WebviewUrl;
 use tauri::Manager;
+use tauri::Emitter;
 use tauri::RunEvent;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
@@ -323,6 +324,10 @@ async fn launch_widget_app() -> Result<(), String> {
 
 #[tauri::command]
 fn read_pending_actions() -> Result<Vec<serde_json::Value>, String> {
+    drain_pending_actions()
+}
+
+fn drain_pending_actions() -> Result<Vec<serde_json::Value>, String> {
     let path = dirs::data_local_dir()
         .ok_or("Could not find local app data directory")?
         .join("TaskBattles")
@@ -458,6 +463,23 @@ pub fn run() {
                 }
             })
             .build(app)?;
+
+        // Drain widget actions from a native thread. A hidden (close-to-tray)
+        // webview throttles JS timers, so polling there delayed widget
+        // check-offs until the window was shown again.
+        {
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_millis(400));
+                match drain_pending_actions() {
+                    Ok(actions) if !actions.is_empty() => {
+                        let _ = handle.emit("widget-actions", actions);
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("[TaskBattles] drain_pending_actions failed: {}", e),
+                }
+            });
+        }
 
         // Enable autostart (cross-platform)
         {

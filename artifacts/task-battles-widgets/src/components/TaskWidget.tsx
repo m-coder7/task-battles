@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { CheckCircle2, Circle, LayoutGrid } from "lucide-react";
 import { readSharedDataFresh } from "@/lib/sharedData";
 
@@ -14,10 +14,19 @@ interface Goal {
   repeatDays: number[] | null;
 }
 
+function localToday(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// How long a widget-side toggle is held on screen while waiting for the main
+// app to apply it and re-export widgets.json.
+const PENDING_TTL_MS = 10_000;
+
 function isActiveToday(g: Goal): boolean {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const dow = new Date().getDay();
-  const repeat = g.repeat ?? g.repeat_days ? "custom" : "none";
   const rpt = g.repeat || (g.repeatDays ? "custom" : "none");
   if (!rpt || rpt === "none") return g.date === today;
   if (rpt === "daily") return true;
@@ -29,7 +38,7 @@ function isActiveToday(g: Goal): boolean {
 }
 
 function isDoneToday(g: Goal): boolean {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   if (g.completed) return true;
   const dates = g.completedDates || g.completed_dates || [];
   if (Array.isArray(dates) && dates.includes(today)) return true;
@@ -37,7 +46,7 @@ function isDoneToday(g: Goal): boolean {
 }
 
 function toggleDoneToday(g: Goal): Goal {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const repeat = g.repeat || (g.repeatDays ? "custom" : "none") || "none";
 
   if (repeat === "none") {
@@ -56,29 +65,49 @@ function toggleDoneToday(g: Goal): Goal {
 export default function TaskWidget({ theme }: { theme: string }) {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const goalsRef = useRef<Goal[]>([]);
+  // goalId -> expected done state, kept until the exported data agrees.
+  const pending = useRef(new Map<string, { expected: boolean; until: number }>());
+
+  const commit = useCallback((next: Goal[]) => {
+    goalsRef.current = next;
+    setGoals(next);
+  }, []);
 
   async function load() {
     try {
       const data = await readSharedDataFresh();
-      if (data) setGoals((data?.goals || []) as Goal[]);
+      if (data) {
+        const now = Date.now();
+        const fresh = (data?.goals || []) as Goal[];
+        commit(fresh.map((g) => {
+          const p = pending.current.get(g.id);
+          if (!p) return g;
+          if (isDoneToday(g) === p.expected || now > p.until) {
+            pending.current.delete(g.id);
+            return g;
+          }
+          return toggleDoneToday(g);
+        }));
+      }
     } catch {
-      setGoals([]);
+      commit([]);
     }
     setLoading(false);
   }
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 5000);
+    const id = setInterval(load, 2000);
     return () => clearInterval(id);
   }, []);
 
   const handleToggle = useCallback(async (goalId: string) => {
-    setGoals((prev) => {
-      const goal = prev.find((g) => g.id === goalId);
-      if (!goal) return prev;
-      return prev.map((g) => (g.id === goalId ? toggleDoneToday(g) : g));
-    });
+    const goal = goalsRef.current.find((g) => g.id === goalId);
+    if (!goal) return;
+    const toggled = toggleDoneToday(goal);
+    pending.current.set(goalId, { expected: isDoneToday(toggled), until: Date.now() + PENDING_TTL_MS });
+    commit(goalsRef.current.map((g) => (g.id === goalId ? toggled : g)));
 
     try {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -90,7 +119,7 @@ export default function TaskWidget({ theme }: { theme: string }) {
         }),
       });
     } catch (e) { console.error("[TaskWidget] write_action failed:", e); }
-  }, []);
+  }, [commit]);
 
   const todayGoals = goals.filter(isActiveToday);
   const doneCount = todayGoals.filter(isDoneToday).length;
