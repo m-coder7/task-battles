@@ -4,7 +4,9 @@
 
 - `artifacts/planner/` - Main Task Battles Tauri desktop app
 - `artifacts/task-battles-widgets/` - Separate Tauri widget app for floating desktop widgets
-- `artifacts/supabase-schema.sql` - SQL to create Rivalry tables in Supabase
+- `artifacts/day-planner-mobile/` - Expo mobile app (parked; not part of the desktop build)
+- `artifacts/supabase-schema.sql` - SQL to create the Supabase tables (goals, events, notes, diary, rivalry)
+- `scripts/repair-linux-appimage.sh` - used by the release workflow
 
 ## Widget Architecture
 
@@ -65,8 +67,7 @@ The widget app has its own `Cargo.toml` and `tauri.conf.json`.
 ## Secrets
 
 All secrets stored in root `.env` file:
-- `PORT`
-- `BASE_PATH`
+- `PORT` and `BASE_PATH` (only needed for plain `vite` runs outside Tauri)
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_AUTH_REDIRECT_URL` (optional — overrides the default `taskbattles://auth/callback` for signup confirmation emails; password resets use an in-app OTP)

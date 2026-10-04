@@ -39,13 +39,14 @@ testem.log
 
 # environment variables
 .env
+.env.*
+!.env.example
 
 # System Files
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
 
 # Tauri
-artifacts/planner/src-tauri/target/
+**/src-tauri/target/
+**/src-tauri/gen/schemas/

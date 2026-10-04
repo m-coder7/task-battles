@@ -24,18 +24,14 @@ macOS and Windows only need Rust — no extra system libs required.
 
 ## Environment Variables
 
-Create `artifacts/planner/.env` (never commit this):
+Create `.env` in the **repository root** (next to `package.json`, never commit it):
 
 ```
-VITE_FIREBASE_API_KEY=your_key
-VITE_FIREBASE_AUTH_DOMAIN=your_domain
-VITE_FIREBASE_PROJECT_ID=your_project
-VITE_FIREBASE_STORAGE_BUCKET=your_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_id
-VITE_FIREBASE_APP_ID=your_app_id
-VITE_SUPABASE_URL=https://mzkjnmbyryzfcpozjccq.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_lYoxybMAD2JIYd9WvB73Jw_NijzRLzw
+VITE_SUPABASE_URL=https://<your-project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your anon/publishable key>
 ```
+
+Without these the app falls back to a placeholder URL and every sign-in fails with "Network error".
 
 ## Generate Icons (one-time after cloning)
 
@@ -77,6 +73,5 @@ Installers are output to `src-tauri/target/release/bundle/`.
 
 The Tauri window allows connections to:
 - `*.supabase.co` (WebSocket + HTTPS)
-- `*.googleapis.com` / `*.firebaseio.com` (Firebase rivalry)
 
 No `webSecurity: false` hack needed — Tauri's CSP handles it cleanly.
