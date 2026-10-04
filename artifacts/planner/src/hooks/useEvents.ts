@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
+import type { ReactNode } from "react";
+import { createContext, createElement, useContext, useState, useCallback, useEffect } from "react";
 import { getDay, parseISO } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth, getStorageKey } from "@/hooks/useAuth";
@@ -83,7 +84,7 @@ function toRow(userId: string, event: CalendarEvent): Record<string, unknown> {
   };
 }
 
-export function useEvents() {
+function useEventsState() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const storageKey = getStorageKey("planner_events", user?.id);
@@ -179,3 +180,18 @@ export const COLOR_MAP: Record<EventColor, { bg: string; text: string; dot: stri
   purple: { bg: "bg-purple-500/15", text: "text-purple-700", dot: "bg-purple-500" },
   pink:   { bg: "bg-pink-500/15",   text: "text-pink-700",   dot: "bg-pink-500"   },
 };
+
+// One shared instance for the whole app. Each independent useEvents() call
+// used to hold its own state, so a change made through one (e.g. a widget
+// toggle applied in App) never reached the others until a remount.
+const EventsContext = createContext<ReturnType<typeof useEventsState> | null>(null);
+
+export function EventsProvider({ children }: { children: ReactNode }) {
+  return createElement(EventsContext.Provider, { value: useEventsState() }, children);
+}
+
+export function useEvents() {
+  const ctx = useContext(EventsContext);
+  if (!ctx) throw new Error("useEvents must be used inside <EventsProvider>");
+  return ctx;
+}

@@ -2,7 +2,19 @@
 // after a mutation, and all calls within the debounce window coalesce into a
 // single export_data_for_widgets invocation.
 
-let timer: NodeJS.Timeout | null = null;
+import { getStorageKey } from "@/hooks/useAuth";
+
+let timer: ReturnType<typeof setTimeout> | null = null;
+let exportUserId: string | null = null;
+
+// Called by the auth-aware providers so exports read the signed-in user's
+// data instead of whichever planner_goals_* key localStorage lists first
+// (which could be the stale "anon" one).
+export function setWidgetExportUser(userId: string | null) {
+  if (exportUserId === userId) return;
+  exportUserId = userId;
+  requestWidgetExport();
+}
 let dirty = false;
 
 export function requestWidgetExport() {
@@ -15,10 +27,10 @@ export function requestWidgetExport() {
 async function exportData() {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    const goalsKey = Object.keys(localStorage).find(k => k.startsWith('planner_goals_')) || 'planner_goals_anon';
-    const eventsKey = Object.keys(localStorage).find(k => k.startsWith('planner_events_')) || 'planner_events_anon';
+    const goalsKey = getStorageKey('planner_goals', exportUserId);
+    const eventsKey = getStorageKey('planner_events', exportUserId);
     const rivalryKey = Object.keys(localStorage).find(k => k.startsWith('rivalry_profile_')) || 'rivalry_profile_anon';
-    const diaryKey = Object.keys(localStorage).find(k => k.startsWith('task_battles_diary_')) || 'task_battles_diary_anon';
+    const diaryKey = getStorageKey('task_battles_diary', exportUserId);
     const goalsJson = localStorage.getItem(goalsKey) || '[]';
     const eventsJson = localStorage.getItem(eventsKey) || '[]';
     const rivalryJson = localStorage.getItem(rivalryKey) || '{}';

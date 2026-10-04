@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import App from "./App";
 import WidgetView from "@/components/WidgetView";
 import { AuthProvider } from "@/hooks/useAuth";
+import { GoalsProvider } from "@/hooks/useGoals";
+import { EventsProvider } from "@/hooks/useEvents";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import "./index.css";
 
@@ -46,7 +48,11 @@ function Root() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <App />
+        <GoalsProvider>
+          <EventsProvider>
+            <App />
+          </EventsProvider>
+        </GoalsProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

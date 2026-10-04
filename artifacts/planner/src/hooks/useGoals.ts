@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
+import { createContext, createElement, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { format, parseISO, isBefore, startOfDay, getDay, differenceInCalendarDays } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -11,7 +12,7 @@ import {
   pushLocalOnly,
   isDeleteQueued,
 } from "@/hooks/useSupabaseSync";
-import { requestWidgetExport } from "@/lib/widgetExportBus";
+import { requestWidgetExport, setWidgetExportUser } from "@/lib/widgetExportBus";
 
 export type GoalCategory = "must-do" | "should-do" | "nice-to-have";
 export type GoalRepeat = "none" | "daily" | "weekdays" | "weekly" | "custom";
@@ -150,7 +151,7 @@ export function isActiveToday(goal: Goal): boolean {
   return false;
 }
 
-export function useGoals() {
+function useGoalsState() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const storageKey = getStorageKey("planner_goals", user?.id);
@@ -273,4 +274,21 @@ export function useGoals() {
   }, [syncGoal]);
 
   return { goals, addGoal, updateGoal, deleteGoal, toggleComplete, markNotified };
+}
+
+// One shared instance for the whole app. Each independent useGoals() call
+// used to hold its own state, so a change made through one (e.g. a widget
+// toggle applied in App) never reached the others until a remount.
+const GoalsContext = createContext<ReturnType<typeof useGoalsState> | null>(null);
+
+export function GoalsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  useEffect(() => { setWidgetExportUser(user?.id ?? null); }, [user?.id]);
+  return createElement(GoalsContext.Provider, { value: useGoalsState() }, children);
+}
+
+export function useGoals() {
+  const ctx = useContext(GoalsContext);
+  if (!ctx) throw new Error("useGoals must be used inside <GoalsProvider>");
+  return ctx;
 }
