@@ -80,6 +80,11 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // cargo writes locked .dll/.exe files under src-tauri/target while Tauri
+    // dev builds; watching them crashes Vite with EBUSY on Windows.
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
   },
   preview: {
     port,

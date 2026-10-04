@@ -29,5 +29,9 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+    // See planner/vite.config.ts: don't watch cargo's target dir.
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
   },
 });
