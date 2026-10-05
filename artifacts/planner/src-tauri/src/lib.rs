@@ -407,7 +407,17 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     configure_linux_webview();
 
+    // Must be the first plugin. A second launch (e.g. the widget app opening
+    // taskbattles://focus) hands its args to this instance and exits instead
+    // of starting a duplicate; the deep-link feature forwards the URL too.
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
