@@ -444,6 +444,17 @@ pub fn run() {
         ]);
 
     builder = builder.setup(|app| {
+        // Installed builds register taskbattles:// via the installer. A dev
+        // build never gets that, so the OS would launch whichever old copy is
+        // installed instead; register this exe while developing.
+        #[cfg(all(debug_assertions, any(windows, target_os = "linux")))]
+        {
+            use tauri_plugin_deep_link::DeepLinkExt;
+            if let Err(e) = app.deep_link().register_all() {
+                eprintln!("[TaskBattles] deep link registration failed: {}", e);
+            }
+        }
+
         let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
         let show = MenuItem::with_id(app, "show", "Show Task Battles", true, None::<&str>)?;
         let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
